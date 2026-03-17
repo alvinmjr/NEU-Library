@@ -48,7 +48,7 @@ export function SignUpForm() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>>) {
+  async function onSubmit(values: z.infer<typeof formSchema>) {
     // TODO: Add Firebase user registration logic here.
     console.log('Form submitted with values:', values);
 
