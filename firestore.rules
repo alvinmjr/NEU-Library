@@ -9,6 +9,7 @@
  * - `/libraryMembers/{userId}/{loans|reservations}`: Subcollections containing user-specific records, accessible only to the owner or an admin.
  * - `/books`, `/authors`, `/publishers`, `/genres`: Top-level collections for public catalog data. These are globally readable but not writable by clients.
  * - `/roles_libraryAdmins/{userId}`: A special collection where the existence of a document signifies a user has administrative privileges.
+ * - `/visits/{visitId}`: Contains library visit records for statistical analysis. Writable and readable only by admins.
  *
  * # Key Security Decisions
  * - **No User Listing**: To protect user privacy, non-administrative users cannot list or discover other members in the `/libraryMembers` collection.
@@ -223,6 +224,22 @@ service cloud.firestore {
     }
 
     // =====================================================================
+    // Visit Statistics Data
+    // =====================================================================
+    /**
+     * @description Stores library visit records for statistical analysis.
+     *   Only library admins can read or write this data.
+     * @path /visits/{visitId}
+     * @allow (get, list, create, update, delete) An admin can perform any operation on visit records.
+     * @deny (get, list, create, update, delete) Regular users cannot access visit records.
+     * @principle Secures statistical data for administrative use only.
+     */
+    match /visits/{visitId} {
+      allow read, write: if isLibraryAdmin();
+    }
+
+
+    // =====================================================================
     // Administrative Roles
     // =====================================================================
 
@@ -244,3 +261,5 @@ service cloud.firestore {
 
   }
 }
+
+    

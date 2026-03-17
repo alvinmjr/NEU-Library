@@ -28,8 +28,8 @@
           "format": "email"
         },
         "studentId": {
-            "type": "string",
-            "description": "The student ID of the library member."
+          "type": "string",
+          "description": "The student ID of the library member."
         },
         "membershipDate": {
           "type": "string",
@@ -299,6 +299,47 @@
         "reservationDate",
         "status"
       ]
+    },
+    "Visit": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Visit",
+      "type": "object",
+      "description": "Represents a single visit to the library for statistical purposes.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Visit entity."
+        },
+        "libraryMemberId": {
+          "type": "string",
+          "description": "The ID of the LibraryMember who visited."
+        },
+        "visitTimestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date and time of the visit."
+        },
+        "reason": {
+          "type": "string",
+          "description": "The primary reason for the visit (e.g., 'Studying', 'Borrowing Books', 'Research', 'Events')."
+        },
+        "college": {
+          "type": "string",
+          "description": "The college associated with the visitor at the time of the visit."
+        },
+        "isEmployee": {
+          "type": "boolean",
+          "description": "True if the visitor was an employee (teacher/staff) at the time of the visit."
+        }
+      },
+      "required": [
+        "id",
+        "libraryMemberId",
+        "visitTimestamp",
+        "reason",
+        "college",
+        "isEmployee"
+      ]
     }
   },
   "auth": {
@@ -444,8 +485,25 @@
             }
           ]
         }
+      },
+      {
+        "path": "/visits/{visitId}",
+        "definition": {
+          "entityName": "Visit",
+          "schema": {
+            "$ref": "#/backend/entities/Visit"
+          },
+          "description": "Stores records of library visits for statistical analysis. Writable by admins.",
+          "params": [
+            {
+              "name": "visitId",
+              "description": "The unique identifier of the visit."
+            }
+          ]
+        }
       }
     ],
     "reasoning": "The Firestore data structure for the NEU Library App prioritizes secure, scalable, and debuggable authorization using the outlined core design principles and mandates. It employs a hybrid approach, segregating public catalog data from private user-specific data, and utilizing a database-backed access control (DBAC) model for administrative roles.\n\n**Authorization Independence via Denormalization:**\n\n1.  **LibraryMember Profile:** The `/libraryMembers/{libraryMemberId}` collection uses the authenticated user's Firebase UID as the `libraryMemberId` (document ID). This inherently ties the document to the user. Additionally, the `externalAuthId` field within the `LibraryMember` document itself will store this same UID. This denormalization ensures that authorization rules can directly compare `request.auth.uid` with the document ID and/or the `externalAuthId` field within the document, eliminating the need for `get()` calls to other documents to determine ownership.\n2.  **Loans and Reservations:** For user-specific data like loans and reservations, a hierarchical structure `/libraryMembers/{libraryMemberId}/loans/{loanId}` and `/libraryMembers/{libraryMemberId}/reservations/{reservationId}` is used. Critically, each `Loan` and `Reservation` document will contain a `memberId` field. This `memberId` field *must* match the `libraryMemberId` in the path and `request.auth.uid`. This explicit denormalization within each document ensures that rules can check the `memberId` field directly without needing to `get()` the parent `LibraryMember` document, making operations atomic and simplifying security rules significantly.\n\n**Support for Query-Aware Permissions (QAPs):**\n\n1.  **Public Catalog Data:** Collections such as `/books`, `/authors`, `/publishers`, and `/genres` are designed to be publicly readable. This uniform security posture allows for secure `list` operations without requiring complex filtering logic in rules. Any user, authenticated or not, can query and retrieve a list of these entities, satisfying the QAP principle.\n2.  **Private User Data:** For user-specific `Loan`s and `Reservation`s, the path structure `/libraryMembers/{libraryMemberId}/loans/{loanId}` allows a logged-in user to query *only their own* loans or reservations by making a `list` query against `/libraryMembers/$(request.auth.uid)/loans`. The rules will enforce that `request.auth.uid` matches `libraryMemberId` in the path segment, ensuring that users can only retrieve their private data without inadvertently exposing other users' information. The denormalized `memberId` within each document further reinforces this, making these `list` operations inherently secure and efficient.\n\n**Database-Backed Access Control (DBAC):**\n\nTo manage administrative access (e.g., library staff who can manage all loans/reservations), a dedicated collection `/roles_libraryAdmins/{adminUid}` is introduced. This collection stores documents where the document ID is the Firebase UID of an administrator. Security rules can then simply check for the existence of a document at `/roles_libraryAdmins/$(request.auth.uid)` to grant elevated privileges, adhering to the DBAC principle and avoiding custom claims.\n\nThis structure provides clear separation of data based on its security posture, enables robust authorization independence, and supports secure `list` operations for both public and private data, leading to a highly debuggable and maintainable security ruleset."
   }
 }
+    
