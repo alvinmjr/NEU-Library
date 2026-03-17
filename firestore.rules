@@ -247,13 +247,14 @@ service cloud.firestore {
      * @description Manages admin roles. The existence of a document here grants a user
      *   admin privileges. This collection is not intended to be managed by clients.
      * @path /roles_libraryAdmins/{adminUid}
-     * @allow (get) An existing admin can check who other admins are.
+     * @allow (get) An authenticated user can check if they themselves are an admin.
+     * @deny (list) No user can list all the admins.
      * @deny (create) A regular user cannot make themselves an admin.
-     * @principle Implements Database-Backed Access Control (DBAC) for administrative roles.
+     * @principle Implements Database-Backed Access Control (DBAC) for administrative roles, while preventing recursive rule evaluation.
      */
     match /roles_libraryAdmins/{adminUid} {
-      allow get: if isLibraryAdmin();
-      allow list: if isLibraryAdmin();
+      allow get: if isOwner(adminUid);
+      allow list: if false;
       allow create: if false;
       allow update: if false;
       allow delete: if false;
@@ -261,5 +262,3 @@ service cloud.firestore {
 
   }
 }
-
-    
