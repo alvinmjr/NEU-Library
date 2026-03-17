@@ -33,9 +33,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4">
-      <h1 className="text-4xl font-bold mb-4">Student Dashboard</h1>
-      <p className="text-muted-foreground mb-8">Welcome, {user.email}</p>
-      <Button onClick={handleSignOut}>Sign Out</Button>
+      <h1 className="text-5xl font-bold mb-6">Welcome to NEU Library!</h1>
+      <p className="text-muted-foreground mb-8">You are signed in as: {user.email}</p>
+      <Button onClick={handleSignOut}>Logout</Button>
     </div>
   );
 }
