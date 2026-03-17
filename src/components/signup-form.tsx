@@ -16,7 +16,12 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { useAuth, useUser, initiateEmailSignUp } from '@/firebase';
+import {
+  useAuth,
+  useUser,
+  initiateEmailSignUp,
+  useFirestore,
+} from '@/firebase';
 import { createLibraryMember } from '@/lib/user-actions';
 
 const formSchema = z
@@ -39,6 +44,7 @@ export function SignUpForm() {
   const { toast } = useToast();
   const router = useRouter();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { user } = useUser();
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -56,8 +62,8 @@ export function SignUpForm() {
   });
 
   React.useEffect(() => {
-    if (user && isSubmitting && submittedValues) {
-      createLibraryMember(user, submittedValues)
+    if (user && isSubmitting && submittedValues && firestore) {
+      createLibraryMember(firestore, user, submittedValues)
         .then(() => {
           toast({
             title: 'Registration Successful!',
@@ -80,7 +86,7 @@ export function SignUpForm() {
           setSubmittedValues(null);
         });
     }
-  }, [user, isSubmitting, submittedValues, router, toast]);
+  }, [user, isSubmitting, submittedValues, router, toast, firestore]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
