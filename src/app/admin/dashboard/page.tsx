@@ -82,6 +82,8 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { ChartConfig, ChartContainer } from '@/components/ui/chart';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 
 // Mock data for filters
@@ -103,7 +105,7 @@ const visitReasons = [
 ];
 
 const logVisitSchema = z.object({
-  libraryMemberId: z.string().min(1, { message: 'Library Member ID is required.' }),
+  visitorName: z.string().optional(),
   reason: z.string().min(1, { message: 'Reason for visit is required.' }),
   college: z.string().min(1, { message: 'College is required.' }),
   isEmployee: z.boolean(),
@@ -111,6 +113,7 @@ const logVisitSchema = z.object({
 
 type VisitData = {
     id: string;
+    visitorName?: string;
     visitTimestamp: Timestamp;
     reason: string;
     college: string;
@@ -228,6 +231,7 @@ export default function AdminDashboardPage() {
       return;
     }
     const checkAdminStatus = async () => {
+      if (!firestore || !user) return;
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
       const docSnap = await getDoc(adminRoleRef);
       if (docSnap.exists()) {
@@ -248,7 +252,7 @@ export default function AdminDashboardPage() {
   const logVisitForm = useForm<z.infer<typeof logVisitSchema>>({
     resolver: zodResolver(logVisitSchema),
     defaultValues: {
-        libraryMemberId: '',
+        visitorName: '',
         reason: '',
         college: '',
         isEmployee: false,
@@ -417,12 +421,12 @@ export default function AdminDashboardPage() {
                     <form onSubmit={logVisitForm.handleSubmit(onLogVisitSubmit)} className="space-y-4">
                         <FormField
                             control={logVisitForm.control}
-                            name="libraryMemberId"
+                            name="visitorName"
                             render={({ field }) => (
                                 <FormItem>
-                                <FormLabel>Library Member ID</FormLabel>
+                                <FormLabel>Visitor Name (Optional)</FormLabel>
                                 <FormControl>
-                                    <Input placeholder="Enter member's Firebase UID" {...field} />
+                                    <Input placeholder="Enter visitor's name" {...field} />
                                 </FormControl>
                                 <FormMessage />
                                 </FormItem>

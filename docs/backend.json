@@ -310,9 +310,9 @@
           "type": "string",
           "description": "Unique identifier for the Visit entity."
         },
-        "libraryMemberId": {
+        "visitorName": {
           "type": "string",
-          "description": "The ID of the LibraryMember who visited."
+          "description": "The name of the visitor. This field is optional."
         },
         "visitTimestamp": {
           "type": "string",
@@ -334,7 +334,6 @@
       },
       "required": [
         "id",
-        "libraryMemberId",
         "visitTimestamp",
         "reason",
         "college",
