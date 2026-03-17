@@ -1,5 +1,6 @@
 'use client';
 
+import * as React from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,15 +16,15 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { useAuth, useUser, initiateEmailSignUp } from '@/firebase';
+import { createLibraryMember } from '@/lib/user-actions';
 
 const formSchema = z
   .object({
     email: z.string().email({ message: 'Invalid email address.' }),
-    studentId: z
-      .string()
-      .regex(/^\d{2}-\d{5}-\d{3}$/, {
-        message: 'Student ID must be in the format ##-#####-###.',
-      }),
+    studentId: z.string().regex(/^\d{2}-\d{5}-\d{3}$/, {
+      message: 'Student ID must be in the format ##-#####-###.',
+    }),
     password: z
       .string()
       .min(6, { message: 'Password must be at least 6 characters.' }),
@@ -37,6 +38,12 @@ const formSchema = z
 export function SignUpForm() {
   const { toast } = useToast();
   const router = useRouter();
+  const auth = useAuth();
+  const { user } = useUser();
+
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [submittedValues, setSubmittedValues] =
+    React.useState<z.infer<typeof formSchema> | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -48,21 +55,46 @@ export function SignUpForm() {
     },
   });
 
+  React.useEffect(() => {
+    if (user && isSubmitting && submittedValues) {
+      createLibraryMember(user, submittedValues)
+        .then(() => {
+          toast({
+            title: 'Registration Successful!',
+            description: 'You will be redirected to the login page.',
+          });
+          setTimeout(() => {
+            router.push('/login');
+          }, 2000);
+        })
+        .catch((error) => {
+          console.error('Failed to create library member:', error);
+          toast({
+            variant: 'destructive',
+            title: 'Uh oh! Something went wrong.',
+            description: 'Could not save user profile. Please try again.',
+          });
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+          setSubmittedValues(null);
+        });
+    }
+  }, [user, isSubmitting, submittedValues, router, toast]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
-    // TODO: Add Firebase user registration logic here.
-    console.log('Form submitted with values:', values);
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    toast({
-      title: 'Registration Successful!',
-      description: 'You will be redirected to the login page.',
-    });
-
-    setTimeout(() => {
-      router.push('/login');
-    }, 2000);
+    setIsSubmitting(true);
+    setSubmittedValues(values);
+    try {
+      initiateEmailSignUp(auth, values.email, values.password);
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Registration Failed',
+        description: error.message || 'An unknown error occurred.',
+      });
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -75,7 +107,11 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Institutional Email</FormLabel>
               <FormControl>
-                <Input placeholder="your.name@institution.edu" {...field} />
+                <Input
+                  placeholder="your.name@institution.edu"
+                  {...field}
+                  disabled={isSubmitting}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -88,7 +124,11 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Student ID</FormLabel>
               <FormControl>
-                <Input placeholder="##-#####-###" {...field} />
+                <Input
+                  placeholder="##-#####-###"
+                  {...field}
+                  disabled={isSubmitting}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -101,7 +141,7 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input type="password" {...field} />
+                <Input type="password" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -114,14 +154,14 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Confirm Password</FormLabel>
               <FormControl>
-                <Input type="password" {...field} />
+                <Input type="password" {...field} disabled={isSubmitting} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        <Button type="submit" className="w-full">
-          Sign Up
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Signing Up...' : 'Sign Up'}
         </Button>
       </form>
     </Form>

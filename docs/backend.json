@@ -27,6 +27,10 @@
           "description": "The email address of the library member.",
           "format": "email"
         },
+        "studentId": {
+            "type": "string",
+            "description": "The student ID of the library member."
+        },
         "membershipDate": {
           "type": "string",
           "description": "The date and time when the member joined the library.",
@@ -50,8 +54,6 @@
       "required": [
         "id",
         "externalAuthId",
-        "firstName",
-        "lastName",
         "email",
         "membershipDate"
       ]
