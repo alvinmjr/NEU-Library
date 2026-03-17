@@ -1,0 +1,449 @@
+{
+  "entities": {
+    "LibraryMember": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LibraryMember",
+      "type": "object",
+      "description": "Represents a user registered with the NEU Library, holding information pertinent to their library activities (e.g., loans, reservations). Authentication details are managed externally.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the LibraryMember entity."
+        },
+        "externalAuthId": {
+          "type": "string",
+          "description": "Identifier from the external authentication system, linking the library profile to an authenticated user."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the library member."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the library member."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the library member.",
+          "format": "email"
+        },
+        "membershipDate": {
+          "type": "string",
+          "description": "The date and time when the member joined the library.",
+          "format": "date-time"
+        },
+        "borrowedBookIds": {
+          "type": "array",
+          "description": "References to Books currently borrowed by this member. (Relationship: LibraryMember N:N Book via Loan)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reservedBookIds": {
+          "type": "array",
+          "description": "References to Books currently reserved by this member. (Relationship: LibraryMember N:N Book via Reservation)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "externalAuthId",
+        "firstName",
+        "lastName",
+        "email",
+        "membershipDate"
+      ]
+    },
+    "Book": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Book",
+      "type": "object",
+      "description": "Represents a single book available in the NEU Library's catalog.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Book entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the book."
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Reference to Author. (Relationship: Author 1:N Book)"
+        },
+        "publisherId": {
+          "type": "string",
+          "description": "Reference to Publisher. (Relationship: Publisher 1:N Book)"
+        },
+        "isbn": {
+          "type": "string",
+          "description": "The International Standard Book Number (ISBN) of the book."
+        },
+        "publicationYear": {
+          "type": "number",
+          "description": "The year the book was published."
+        },
+        "genreIds": {
+          "type": "array",
+          "description": "References to Genres associated with this book. (Relationship: Genre N:N Book)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief summary or abstract of the book."
+        },
+        "totalCopies": {
+          "type": "number",
+          "description": "The total number of physical copies of this book owned by the library."
+        },
+        "availableCopies": {
+          "type": "number",
+          "description": "The number of copies currently available for borrowing."
+        },
+        "coverImageUrl": {
+          "type": "string",
+          "description": "URL to the book's cover image.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "authorId",
+        "publisherId",
+        "isbn",
+        "publicationYear",
+        "totalCopies",
+        "availableCopies"
+      ]
+    },
+    "Author": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Author",
+      "type": "object",
+      "description": "Represents an author of one or more books in the library.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Author entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the author."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the author."
+        },
+        "biography": {
+          "type": "string",
+          "description": "A short biographical sketch of the author."
+        },
+        "birthDate": {
+          "type": "string",
+          "description": "The author's date of birth.",
+          "format": "date"
+        },
+        "deathDate": {
+          "type": "string",
+          "description": "The author's date of death.",
+          "format": "date"
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName"
+      ]
+    },
+    "Publisher": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Publisher",
+      "type": "object",
+      "description": "Represents a publisher of books in the library's catalog.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Publisher entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the publishing company."
+        },
+        "headquartersLocation": {
+          "type": "string",
+          "description": "The primary location of the publisher's headquarters."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Genre": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Genre",
+      "type": "object",
+      "description": "Represents a category or genre under which books are classified.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Genre entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the genre (e.g., 'Science Fiction', 'History')."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Loan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Loan",
+      "type": "object",
+      "description": "Represents an instance of a specific book copy being borrowed by a library member.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Loan entity."
+        },
+        "bookId": {
+          "type": "string",
+          "description": "Reference to Book. (Relationship: Book 1:N Loan)"
+        },
+        "memberId": {
+          "type": "string",
+          "description": "Reference to LibraryMember. (Relationship: LibraryMember 1:N Loan)"
+        },
+        "loanDate": {
+          "type": "string",
+          "description": "The date and time when the book was borrowed.",
+          "format": "date-time"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date and time when the book is due for return.",
+          "format": "date-time"
+        },
+        "returnDate": {
+          "type": "string",
+          "description": "The date and time when the book was actually returned. Null if not yet returned.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the loan (e.g., 'borrowed', 'overdue', 'returned')."
+        }
+      },
+      "required": [
+        "id",
+        "bookId",
+        "memberId",
+        "loanDate",
+        "dueDate",
+        "status"
+      ]
+    },
+    "Reservation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Reservation",
+      "type": "object",
+      "description": "Represents a request by a library member to reserve a book that is currently unavailable.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Reservation entity."
+        },
+        "bookId": {
+          "type": "string",
+          "description": "Reference to Book. (Relationship: Book 1:N Reservation)"
+        },
+        "memberId": {
+          "type": "string",
+          "description": "Reference to LibraryMember. (Relationship: LibraryMember 1:N Reservation)"
+        },
+        "reservationDate": {
+          "type": "string",
+          "description": "The date and time when the reservation was placed.",
+          "format": "date-time"
+        },
+        "pickupReadyDate": {
+          "type": "string",
+          "description": "The date and time when the book became available for pickup. Null if not yet ready.",
+          "format": "date-time"
+        },
+        "expiryDate": {
+          "type": "string",
+          "description": "The date and time by which the reserved book must be picked up.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the reservation (e.g., 'pending', 'ready_for_pickup', 'cancelled', 'fulfilled')."
+        }
+      },
+      "required": [
+        "id",
+        "bookId",
+        "memberId",
+        "reservationDate",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/libraryMembers/{libraryMemberId}",
+        "definition": {
+          "entityName": "LibraryMember",
+          "schema": {
+            "$ref": "#/backend/entities/LibraryMember"
+          },
+          "description": "Stores individual library member profiles. The document ID (`libraryMemberId`) MUST be the Firebase Auth UID of the member. The `externalAuthId` field within the document also stores this UID for explicit authorization independence. Accessible only by the owning user or administrators.",
+          "params": [
+            {
+              "name": "libraryMemberId",
+              "description": "The unique identifier of the library member, which corresponds to the Firebase Authentication User ID (UID)."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/books/{bookId}",
+        "definition": {
+          "entityName": "Book",
+          "schema": {
+            "$ref": "#/backend/entities/Book"
+          },
+          "description": "Catalog of all books available in the library. This collection is publicly readable by all users (authenticated or not).",
+          "params": [
+            {
+              "name": "bookId",
+              "description": "The unique identifier of the book."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/authors/{authorId}",
+        "definition": {
+          "entityName": "Author",
+          "schema": {
+            "$ref": "#/backend/entities/Author"
+          },
+          "description": "Catalog of authors. This collection is publicly readable by all users (authenticated or not).",
+          "params": [
+            {
+              "name": "authorId",
+              "description": "The unique identifier of the author."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/publishers/{publisherId}",
+        "definition": {
+          "entityName": "Publisher",
+          "schema": {
+            "$ref": "#/backend/entities/Publisher"
+          },
+          "description": "Catalog of publishers. This collection is publicly readable by all users (authenticated or not).",
+          "params": [
+            {
+              "name": "publisherId",
+              "description": "The unique identifier of the publisher."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/genres/{genreId}",
+        "definition": {
+          "entityName": "Genre",
+          "schema": {
+            "$ref": "#/backend/entities/Genre"
+          },
+          "description": "Catalog of genres. This collection is publicly readable by all users (authenticated or not).",
+          "params": [
+            {
+              "name": "genreId",
+              "description": "The unique identifier of the genre."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/libraryMembers/{libraryMemberId}/loans/{loanId}",
+        "definition": {
+          "entityName": "Loan",
+          "schema": {
+            "$ref": "#/backend/entities/Loan"
+          },
+          "description": "Stores loan records specific to a library member. The `memberId` field within the document is denormalized to match `libraryMemberId` from the path and `request.auth.uid` for explicit authorization independence. Accessible only by the owning user or administrators.",
+          "params": [
+            {
+              "name": "libraryMemberId",
+              "description": "The unique identifier of the library member, which corresponds to the Firebase Authentication User ID (UID)."
+            },
+            {
+              "name": "loanId",
+              "description": "The unique identifier of the loan."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/libraryMembers/{libraryMemberId}/reservations/{reservationId}",
+        "definition": {
+          "entityName": "Reservation",
+          "schema": {
+            "$ref": "#/backend/entities/Reservation"
+          },
+          "description": "Stores reservation records specific to a library member. The `memberId` field within the document is denormalized to match `libraryMemberId` from the path and `request.auth.uid` for explicit authorization independence. Accessible only by the owning user or administrators.",
+          "params": [
+            {
+              "name": "libraryMemberId",
+              "description": "The unique identifier of the library member, which corresponds to the Firebase Authentication User ID (UID)."
+            },
+            {
+              "name": "reservationId",
+              "description": "The unique identifier of the reservation."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_libraryAdmins/{adminUid}",
+        "definition": {
+          "entityName": "LibraryAdminRole",
+          "schema": {
+            "$ref": "#/backend/entities/LibraryMember"
+          },
+          "description": "Dedicated collection for storing library administrator roles. Document IDs are the Firebase UIDs of users designated as administrators. Used for database-backed access control (DBAC) to grant elevated privileges to library staff for managing all data.",
+          "params": [
+            {
+              "name": "adminUid",
+              "description": "The Firebase Authentication User ID (UID) of a user who holds the library administrator role."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure for the NEU Library App prioritizes secure, scalable, and debuggable authorization using the outlined core design principles and mandates. It employs a hybrid approach, segregating public catalog data from private user-specific data, and utilizing a database-backed access control (DBAC) model for administrative roles.\n\n**Authorization Independence via Denormalization:**\n\n1.  **LibraryMember Profile:** The `/libraryMembers/{libraryMemberId}` collection uses the authenticated user's Firebase UID as the `libraryMemberId` (document ID). This inherently ties the document to the user. Additionally, the `externalAuthId` field within the `LibraryMember` document itself will store this same UID. This denormalization ensures that authorization rules can directly compare `request.auth.uid` with the document ID and/or the `externalAuthId` field within the document, eliminating the need for `get()` calls to other documents to determine ownership.\n2.  **Loans and Reservations:** For user-specific data like loans and reservations, a hierarchical structure `/libraryMembers/{libraryMemberId}/loans/{loanId}` and `/libraryMembers/{libraryMemberId}/reservations/{reservationId}` is used. Critically, each `Loan` and `Reservation` document will contain a `memberId` field. This `memberId` field *must* match the `libraryMemberId` in the path and `request.auth.uid`. This explicit denormalization within each document ensures that rules can check the `memberId` field directly without needing to `get()` the parent `LibraryMember` document, making operations atomic and simplifying security rules significantly.\n\n**Support for Query-Aware Permissions (QAPs):**\n\n1.  **Public Catalog Data:** Collections such as `/books`, `/authors`, `/publishers`, and `/genres` are designed to be publicly readable. This uniform security posture allows for secure `list` operations without requiring complex filtering logic in rules. Any user, authenticated or not, can query and retrieve a list of these entities, satisfying the QAP principle.\n2.  **Private User Data:** For user-specific `Loan`s and `Reservation`s, the path structure `/libraryMembers/{libraryMemberId}/loans/{loanId}` allows a logged-in user to query *only their own* loans or reservations by making a `list` query against `/libraryMembers/$(request.auth.uid)/loans`. The rules will enforce that `request.auth.uid` matches `libraryMemberId` in the path segment, ensuring that users can only retrieve their private data without inadvertently exposing other users' information. The denormalized `memberId` within each document further reinforces this, making these `list` operations inherently secure and efficient.\n\n**Database-Backed Access Control (DBAC):**\n\nTo manage administrative access (e.g., library staff who can manage all loans/reservations), a dedicated collection `/roles_libraryAdmins/{adminUid}` is introduced. This collection stores documents where the document ID is the Firebase UID of an administrator. Security rules can then simply check for the existence of a document at `/roles_libraryAdmins/$(request.auth.uid)` to grant elevated privileges, adhering to the DBAC principle and avoiding custom claims.\n\nThis structure provides clear separation of data based on its security posture, enables robust authorization independence, and supports secure `list` operations for both public and private data, leading to a highly debuggable and maintainable security ruleset."
+  }
+}
