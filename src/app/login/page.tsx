@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { doc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { ArrowLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,7 @@ import { useAuth, useFirestore, useUser, initiateEmailSignIn } from '@/firebase'
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Invalid email address.' }),
+  email: z.string().email({ message: 'Invalid email address.' }).or(z.string().min(1)),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
@@ -51,6 +52,8 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = React.useState(false);
+  const [isProcessingAdminLogin, setIsProcessingAdminLogin] = React.useState(false);
+
 
   const backgroundImage = PlaceHolderImages.find(
     (p) => p.id === 'library-background'
@@ -67,14 +70,16 @@ export default function LoginPage() {
   });
 
   React.useEffect(() => {
+    if (isProcessingAdminLogin) return; // Defer to admin-specific logic
+
     if (user && !isUserLoading) {
-      setIsSubmitting(true);
+      // This logic is for student login redirection
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
       getDoc(adminRoleRef)
         .then((docSnap) => {
           if (docSnap.exists()) {
-            toast({ title: 'Admin Login Successful' });
-            router.push('/admin/dashboard');
+            // A user with admin role tried to log in via student form
+             router.push('/admin/dashboard');
           } else {
             toast({ title: 'Login Successful' });
             router.push('/dashboard');
@@ -90,22 +95,65 @@ export default function LoginPage() {
           router.push('/dashboard');
         });
     }
-  }, [user, isUserLoading, router, firestore, toast]);
+  }, [user, isUserLoading, router, firestore, toast, isProcessingAdminLogin]);
 
-  async function handleLogin(values: z.infer<typeof loginSchema>) {
+  function handleStudentLogin(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Authentication service is not available.",
+        });
+        setIsSubmitting(false);
+        return;
+    }
+    initiateEmailSignIn(auth, values.email, values.password);
+    // The useEffect will handle redirection.
+  }
+
+  async function handleAdminLogin(values: z.infer<typeof loginSchema>) {
+    setIsProcessingAdminLogin(true);
+    setIsSubmitting(true);
+    const { email, password } = values;
+
+    const isProfessor = email === 'jcesperanza@neu.edu.ph';
+    const isHardcodedAdmin = email === 'admin' && password === 'admin123';
+
+    if (!isProfessor && !isHardcodedAdmin) {
+        toast({
+            variant: 'destructive',
+            title: 'Login Failed',
+            description: 'Invalid admin credentials.',
+        });
+        setIsSubmitting(false);
+        setIsProcessingAdminLogin(false);
+        return;
+    }
+
+    // For hardcoded admin, we attempt to log in as the professor.
+    const loginEmail = isHardcodedAdmin ? 'jcesperanza@neu.edu.ph' : email;
+    const loginPassword = isHardcodedAdmin ? 'admin123' : password;
+
     try {
-      initiateEmailSignIn(auth, values.email, values.password);
-      // The useEffect will handle redirection.
+        if (!auth) throw new Error("Auth service not available");
+        
+        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+        
+        toast({ title: 'Admin Login Successful' });
+        router.push('/admin/dashboard');
+        // No need to reset flags, component will unmount.
     } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: error.message || 'An unknown error occurred.',
-      });
-      setIsSubmitting(false);
+        toast({
+            variant: 'destructive',
+            title: 'Admin Login Failed',
+            description: 'Invalid email or password.',
+        });
+        setIsSubmitting(false);
+        setIsProcessingAdminLogin(false);
     }
   }
+
 
   return (
     <div className="w-full min-h-screen">
@@ -143,7 +191,7 @@ export default function LoginPage() {
           <CardContent>
             <Form {...studentForm}>
               <form
-                onSubmit={studentForm.handleSubmit(handleLogin)}
+                onSubmit={studentForm.handleSubmit(handleStudentLogin)}
                 className="space-y-4"
               >
                 <FormField
@@ -211,7 +259,7 @@ export default function LoginPage() {
           </DialogHeader>
           <Form {...adminForm}>
             <form
-              onSubmit={adminForm.handleSubmit(handleLogin)}
+              onSubmit={adminForm.handleSubmit(handleAdminLogin)}
               className="space-y-4"
             >
               <FormField
@@ -219,10 +267,10 @@ export default function LoginPage() {
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Admin Email</FormLabel>
+                    <FormLabel>Admin Email or Username</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="admin@institution.edu"
+                        placeholder="admin@institution.edu or 'admin'"
                         {...field}
                         disabled={isSubmitting}
                       />
