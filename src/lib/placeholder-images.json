@@ -2,9 +2,9 @@
   "placeholderImages": [
     {
       "id": "library-background",
-      "description": "A background image of a university campus.",
-      "imageUrl": "https://picsum.photos/seed/university/1920/1080",
-      "imageHint": "university building"
+      "description": "A background image of a library.",
+      "imageUrl": "https://picsum.photos/seed/library/1920/1080",
+      "imageHint": "library books"
     }
   ]
 }
