@@ -40,6 +40,49 @@ import { useAuth, useFirestore, useUser, initiateEmailSignIn } from '@/firebase'
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 const loginSchema = z.object({
+  email:![CDATA[
+'use client';
+
+import * as React from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { doc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { ArrowLeft } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth, useFirestore, useUser, initiateEmailSignIn } from '@/firebase';
+import { PlaceHolderImages } from '@/lib/placeholder-images';
+
+const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }).or(z.string().min(1)),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
@@ -270,7 +313,6 @@ export default function LoginPage() {
                     <FormLabel>Admin Email or Username</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="admin@institution.edu or 'admin'"
                         {...field}
                         disabled={isSubmitting}
                       />
