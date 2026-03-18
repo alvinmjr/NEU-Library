@@ -118,40 +118,53 @@ export default function LoginPage() {
     setIsSubmitting(true);
     const { email, password } = values;
 
-    const isProfessor = email === 'jcesperanza@neu.edu.ph';
-    const isHardcodedAdmin = email === 'admin' && password === 'admin123';
+    // Define the admin credentials
+    const professorEmail = 'jcesperanza@neu.edu.ph';
+    const hardcodedAdminUsername = 'admin';
+    const hardcodedAdminPassword = 'admin123';
 
-    if (!isProfessor && !isHardcodedAdmin) {
-        toast({
-            variant: 'destructive',
-            title: 'Login Failed',
-            description: 'Invalid admin credentials.',
-        });
-        setIsSubmitting(false);
-        setIsProcessingAdminLogin(false);
-        return;
+    let loginEmail = '';
+    let loginPassword = '';
+
+    const isDirectProfessorLogin = email === professorEmail;
+    const isHardcodedAdminLogin = email === hardcodedAdminUsername && password === hardcodedAdminPassword;
+
+    if (isHardcodedAdminLogin) {
+      // For the hardcoded 'admin'/'admin123' login, we use the professor's email.
+      // This requires the professor's account in Firebase Auth to have the password 'admin123'.
+      loginEmail = professorEmail;
+      loginPassword = hardcodedAdminPassword;
+    } else if (isDirectProfessorLogin) {
+      // For a direct login with the professor's email, use the provided password.
+      loginEmail = professorEmail;
+      loginPassword = password;
+    } else {
+      // Not a valid admin login attempt
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'Invalid admin credentials.',
+      });
+      setIsSubmitting(false);
+      setIsProcessingAdminLogin(false);
+      return;
     }
 
-    // For hardcoded admin, we attempt to log in as the professor.
-    const loginEmail = isHardcodedAdmin ? 'jcesperanza@neu.edu.ph' : email;
-    const loginPassword = isHardcodedAdmin ? 'admin123' : password;
-
     try {
-        if (!auth) throw new Error("Auth service not available");
-        
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-        
-        toast({ title: 'Admin Login Successful' });
-        router.push('/admin/dashboard');
-        // No need to reset flags, component will unmount.
+      if (!auth) throw new Error("Auth service not available");
+      
+      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      
+      toast({ title: 'Admin Login Successful' });
+      router.push('/admin/dashboard');
     } catch (error: any) {
-        toast({
-            variant: 'destructive',
-            title: 'Admin Login Failed',
-            description: 'Invalid email or password.',
-        });
-        setIsSubmitting(false);
-        setIsProcessingAdminLogin(false);
+      toast({
+        variant: 'destructive',
+        title: 'Admin Login Failed',
+        description: 'Invalid email or password.',
+      });
+      setIsSubmitting(false);
+      setIsProcessingAdminLogin(false);
     }
   }
 
