@@ -63,8 +63,6 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = React.useState(false);
-  const [isProcessingAdminLogin, setIsProcessingAdminLogin] = React.useState(false);
-
 
   const backgroundImage = PlaceHolderImages.find(
     (p) => p.id === 'library-background'
@@ -81,47 +79,39 @@ export default function LoginPage() {
   });
 
   React.useEffect(() => {
-    if (!firestore || isProcessingAdminLogin) return; // Defer to admin-specific logic if it's running
-
-    if (user && !isUserLoading) {
-      // Check for professor's email first for admin access
-      if (user.email === 'jcesperanza@neu.edu.ph') {
-        // No toast here, as the admin login function will show one.
-        // This just handles the case where the admin is already logged in and revisits the page.
-        router.push('/admin/dashboard');
-        return; // Stop further checks
-      }
-
-      // If not the professor, check for admin role in Firestore
-      const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
-      getDoc(adminRoleRef)
-        .then((docSnap) => {
-          if (docSnap.exists()) {
-            // User has an admin role
+    // This effect handles redirection for:
+    // 1. Users who are already logged in when they visit the page.
+    // 2. Users who log in via the non-blocking Google or Student forms.
+    // The Admin form handles its own redirection logic and is not covered by this effect.
+    if (user && !isUserLoading && firestore) {
+      const checkUserRoleAndRedirect = async () => {
+        try {
+          const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
+          const adminDoc = await getDoc(adminRoleRef);
+          
+          if (adminDoc.exists() || user.email === 'jcesperanza@neu.edu.ph') {
+            // User is an admin, go to admin dashboard.
             router.push('/admin/dashboard');
           } else {
-            // It's a regular user, ensure their profile exists
+            // User is a regular member.
             const memberRef = doc(firestore, 'libraryMembers', user.uid);
-            getDoc(memberRef).then((memberSnap) => {
-              if (memberSnap.exists()) {
-                toast({ title: 'Login Successful' });
+            const memberSnap = await getDoc(memberRef);
+
+            if (memberSnap.exists()) {
+              toast({ title: 'Login Successful' });
+              router.push('/dashboard');
+            } else {
+              // This is a new user (likely via Google Sign In). Create their profile.
+              if (user.email) {
+                createLibraryMember(firestore, user, { email: user.email, studentId: '' });
+                toast({ title: 'Welcome!', description: 'Your account has been created.' });
                 router.push('/dashboard');
               } else {
-                // New user via Google Sign In. Create a profile.
-                if (user.email) {
-                  createLibraryMember(firestore, user, { email: user.email, studentId: '' });
-                  toast({ title: 'Welcome!', description: 'Your account has been created.' });
-                  router.push('/dashboard');
-                } else {
-                  // This case is unlikely with Google Sign-In but good to handle
-                  toast({ variant: 'destructive', title: 'Login Error', description: 'Could not retrieve user email.' });
-                  if (auth) auth.signOut();
-                }
+                if (auth) auth.signOut();
               }
-            });
+            }
           }
-        })
-        .catch((error) => {
+        } catch (error) {
           console.error('Error checking user role:', error);
           toast({
             variant: 'destructive',
@@ -129,9 +119,12 @@ export default function LoginPage() {
             description: 'Could not verify your user role.',
           });
           if (auth) auth.signOut();
-        });
+        }
+      };
+
+      checkUserRoleAndRedirect();
     }
-  }, [user, isUserLoading, router, firestore, toast, isProcessingAdminLogin, auth]);
+  }, [user, isUserLoading, router, firestore, toast, auth]);
 
 
   function handleStudentLogin(values: z.infer<typeof loginSchema>) {
@@ -165,45 +158,36 @@ export default function LoginPage() {
   }
 
   async function handleAdminLogin(values: z.infer<typeof loginSchema>) {
-    setIsProcessingAdminLogin(true);
     setIsSubmitting(true);
     const { email, password } = values;
-
-    // Define admin credentials
-    const professorEmail = 'jcesperanza@neu.edu.ph';
-    const hardcodedAdminUsername = 'admin';
-    const hardcodedAdminPassword = 'admin123';
-
-    let loginEmail = email;
-    let loginPassword = password;
-
-    // If the user enters the hardcoded alias, map it to the professor's email.
-    // This requires that the professor's account in Firebase Auth has 'admin123' as its password.
-    if (email === hardcodedAdminUsername && password === hardcodedAdminPassword) {
-      loginEmail = professorEmail;
-      loginPassword = hardcodedAdminPassword;
-    }
 
     try {
       if (!auth || !firestore) throw new Error("Firebase services not available");
 
-      // Step 1: Attempt to sign in with the resolved credentials
-      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      const user = userCredential.user;
+      let userCredential;
 
-      // Step 2: Verify if the successfully logged-in user is an administrator
-      const isProfessor = user.email === professorEmail;
+      // Case 1: Hardcoded credentials for the professor's account
+      if (email.toLowerCase() === 'admin' && password === 'admin123') {
+        // Attempt to sign in as the designated professor.
+        // IMPORTANT: The password for 'jcesperanza@neu.edu.ph' MUST be 'admin123' in Firebase Auth for this to work.
+        userCredential = await signInWithEmailAndPassword(auth, 'jcesperanza@neu.edu.ph', 'admin123');
+      } else {
+        // Case 2: Any other email/password, attempt to sign in and then check if they are an admin
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
+      }
       
-      const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
-      const adminDoc = await getDoc(adminRoleRef);
-      const hasAdminRole = adminDoc.exists();
+      const loggedInUser = userCredential.user;
 
-      if (isProfessor || hasAdminRole) {
-        // Step 3: User is a verified admin, proceed to dashboard
+      // After successful authentication, verify if the user has admin rights.
+      const adminRoleRef = doc(firestore, 'roles_libraryAdmins', loggedInUser.uid);
+      const adminDoc = await getDoc(adminRoleRef);
+      const isProfessor = loggedInUser.email === 'jcesperanza@neu.edu.ph';
+
+      if (adminDoc.exists() || isProfessor) {
         toast({ title: 'Admin Login Successful' });
         router.push('/admin/dashboard');
       } else {
-        // Step 3b: User logged in but is not an admin. Sign them out.
+        // If the user authenticated but isn't an admin, sign them out immediately.
         await auth.signOut();
         toast({
           variant: 'destructive',
@@ -211,16 +195,16 @@ export default function LoginPage() {
           description: 'You do not have administrative privileges.',
         });
       }
+
     } catch (error: any) {
-      // This catch block handles Firebase authentication errors (e.g., wrong password)
+      // This will catch authentication errors like wrong password or user not found.
       toast({
         variant: 'destructive',
         title: 'Admin Login Failed',
-        description: 'Invalid email or password.',
+        description: 'Invalid credentials. Please check your email and password.',
       });
     } finally {
       setIsSubmitting(false);
-      setIsProcessingAdminLogin(false);
     }
   }
 
