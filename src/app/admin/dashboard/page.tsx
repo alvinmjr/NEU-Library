@@ -85,10 +85,9 @@ import { Label } from '@/components/ui/label';
 
 const colleges = [
   'All',
-  'College of Engineering',
-  'College of Science',
-  'College of Arts & Humanities',
-  'Business School',
+  'College of Engineering and Architecture',
+  'College of Informatics and Computing Studies',
+  'College of Arts and Sciences',
   'Other',
 ];
 
