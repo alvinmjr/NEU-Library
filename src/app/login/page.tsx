@@ -162,17 +162,8 @@ export default function LoginPage() {
     try {
       if (!auth || !firestore) throw new Error("Firebase services not available");
 
-      let userCredential;
-
-      // Case 1: Hardcoded credentials for admin login
-      if (email === 'AdminAccount' && password === '123456789') {
-        // Sign in with the professor's email
-        userCredential = await signInWithEmailAndPassword(auth, 'jcesperanza@neu.edu.ph', '123456789');
-      } else {
-        // Case 2: Attempt to sign in with the provided email and password
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
-      }
-
+      // Attempt to sign in with the provided email and password
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const loggedInUser = userCredential.user;
 
       // After successful authentication, check if the user has admin rights
