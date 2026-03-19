@@ -78,9 +78,6 @@ export default function LoginPage() {
   });
 
   React.useEffect(() => {
-    // This effect handles redirection for:
-    // 1. Users who are already logged in when they visit the page.
-    // 2. Users who log in via the non-blocking Google or Student forms.
     if (user && !isUserLoading && firestore) {
       const checkUserRoleAndRedirect = async () => {
         try {
@@ -89,11 +86,9 @@ export default function LoginPage() {
           const isAdminByEmail = user.email === 'jcesperanza@neu.edu.ph' || user.email === 'alvin.antoniojr@neu.edu.ph';
           
           if (adminDoc.exists() || isAdminByEmail) {
-            // User is an admin, go to admin dashboard.
             toast({ title: 'Admin Login Successful' });
             router.push('/admin/dashboard');
           } else {
-            // User is a regular member.
             const memberRef = doc(firestore, 'libraryMembers', user.uid);
             const memberSnap = await getDoc(memberRef);
 
@@ -101,13 +96,11 @@ export default function LoginPage() {
               toast({ title: 'Login Successful' });
               router.push('/dashboard');
             } else {
-              // This is a new user (likely via Google Sign In). Create their profile.
               if (user.email) {
                 createLibraryMember(firestore, user, { email: user.email, studentId: '' });
                 toast({ title: 'Welcome!', description: 'Your account has been created.' });
                 router.push('/dashboard');
               } else {
-                // If Google sign in didn't provide an email, we can't create a profile.
                 if (auth) auth.signOut();
               }
             }
@@ -138,8 +131,17 @@ export default function LoginPage() {
         setIsSubmitting(false);
         return;
     }
-    initiateEmailSignIn(auth, values.email, values.password);
-    // The useEffect will handle redirection.
+    initiateEmailSignIn(auth, values.email, values.password)
+        .catch(error => {
+            toast({
+                variant: "destructive",
+                title: "Login Failed",
+                description: "Invalid credentials or another error occurred.",
+            });
+        })
+        .finally(() => {
+            setIsSubmitting(false);
+        });
   }
 
   function handleGoogleSignIn() {
@@ -153,8 +155,17 @@ export default function LoginPage() {
         setIsSubmitting(false);
         return;
     }
-    initiateGoogleSignIn(auth);
-    // The useEffect will handle redirection and profile creation.
+    initiateGoogleSignIn(auth)
+        .catch(error => {
+            toast({
+                variant: "destructive",
+                title: "Google Sign-In Failed",
+                description: error.message || "An unknown error occurred.",
+            });
+        })
+        .finally(() => {
+            setIsSubmitting(false);
+        });
   }
 
   async function handleAdminLogin(values: z.infer<typeof loginSchema>) {
@@ -164,20 +175,17 @@ export default function LoginPage() {
     try {
       if (!auth || !firestore) throw new Error("Firebase services not available");
 
-      // Attempt to sign in with the provided email and password
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const loggedInUser = userCredential.user;
 
-      // After successful authentication, check if the user has admin rights
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', loggedInUser.uid);
       const adminDoc = await getDoc(adminRoleRef);
       const isAdminByEmail = loggedInUser.email === 'jcesperanza@neu.edu.ph' || loggedInUser.email === 'alvin.antoniojr@neu.edu.ph';
 
       if (adminDoc.exists() || isAdminByEmail) {
         toast({ title: 'Admin Login Successful' });
-        router.push('/admin/dashboard'); // Redirect to Admin Dashboard
+        router.push('/admin/dashboard');
       } else {
-        // If the user isn't an admin, sign them out
         await auth.signOut();
         toast({
           variant: 'destructive',
@@ -186,11 +194,10 @@ export default function LoginPage() {
         });
       }
     } catch (error: any) {
-      // Authentication error handling
       toast({
         variant: 'destructive',
         title: 'Admin Login Failed',
-        description: 'Invalid credentials. Please check your email and password.',
+        description: 'Invalid credentials or another error occurred.',
       });
     } finally {
       setIsSubmitting(false);

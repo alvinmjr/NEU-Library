@@ -91,16 +91,28 @@ export function SignUpForm() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     setSubmittedValues(values);
-    try {
-      initiateEmailSignUp(auth, values.email, values.password);
-    } catch (error: any) {
+    if (!auth) {
       toast({
         variant: 'destructive',
         title: 'Registration Failed',
-        description: error.message || 'An unknown error occurred.',
+        description: 'Authentication service not available.',
       });
       setIsSubmitting(false);
+      return;
     }
+
+    initiateEmailSignUp(auth, values.email, values.password).catch(
+      (error: any) => {
+        toast({
+          variant: 'destructive',
+          title: 'Registration Failed',
+          description: error.message || 'An unknown error occurred.',
+        });
+        // If sign-up fails, reset the submitting state.
+        setIsSubmitting(false);
+        setSubmittedValues(null);
+      }
+    );
   }
 
   return (
