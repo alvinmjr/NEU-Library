@@ -41,7 +41,7 @@ import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { createLibraryMember } from '@/lib/user-actions';
 
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Invalid email address.' }).or(z.string().min(1)),
+  email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
 
@@ -81,7 +81,6 @@ export default function LoginPage() {
     // This effect handles redirection for:
     // 1. Users who are already logged in when they visit the page.
     // 2. Users who log in via the non-blocking Google or Student forms.
-    // The Admin form handles its own redirection logic and is not covered by this effect.
     if (user && !isUserLoading && firestore) {
       const checkUserRoleAndRedirect = async () => {
         try {
@@ -90,6 +89,7 @@ export default function LoginPage() {
           
           if (adminDoc.exists() || user.email === 'jcesperanza@neu.edu.ph') {
             // User is an admin, go to admin dashboard.
+            toast({ title: 'Admin Login Successful' });
             router.push('/admin/dashboard');
           } else {
             // User is a regular member.
@@ -106,6 +106,7 @@ export default function LoginPage() {
                 toast({ title: 'Welcome!', description: 'Your account has been created.' });
                 router.push('/dashboard');
               } else {
+                // If Google sign in didn't provide an email, we can't create a profile.
                 if (auth) auth.signOut();
               }
             }
@@ -315,56 +316,77 @@ export default function LoginPage() {
           <DialogHeader>
             <DialogTitle>Admin Login</DialogTitle>
             <DialogDescription>
-              Enter administrator credentials to continue.
+              Enter administrator credentials or sign in with Google.
             </DialogDescription>
           </DialogHeader>
-          <Form {...adminForm}>
-            <form
-              onSubmit={adminForm.handleSubmit(handleAdminLogin)}
-              className="space-y-4"
-            >
-              <FormField
-                control={adminForm.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Admin Email or Username</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={adminForm.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="password"
-                        {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={isSubmitting}
+          <div className="grid gap-4 py-4">
+            <Form {...adminForm}>
+              <form
+                onSubmit={adminForm.handleSubmit(handleAdminLogin)}
+                className="space-y-4"
               >
-                {isSubmitting ? 'Logging In...' : 'Login as Admin'}
-              </Button>
-            </form>
-          </Form>
+                <FormField
+                  control={adminForm.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Admin Email</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={adminForm.control}
+                  name="password"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Password</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="password"
+                          {...field}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? 'Logging In...' : 'Login as Admin'}
+                </Button>
+              </form>
+            </Form>
+            <div className="relative my-2">
+                <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-background px-2 text-muted-foreground">
+                    Or
+                    </span>
+                </div>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignIn}
+              disabled={isSubmitting}
+            >
+              <GoogleIcon />
+              Sign in with Google
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
