@@ -1,42 +1,30 @@
 /**
- * This ruleset provides public read access to global configuration data
- * while restricting all write operations to a predefined set of administrators.
- * The model leverages a separate 'roles_admin' collection for administrative
- * role management, ensuring a clear separation of data and permissions.
+ * This ruleset enforces a security model for a global application configuration.
  *
- * Core Philosophy:
- * Public read, Admin-only write. This allows anonymous or any authenticated
- * user to view application settings, but only trusted admins can modify them.
+ * Core Philosophy: The ruleset is designed to be highly secure yet simple. It manages a public-facing configuration
+ * that is readable by anyone (including unauthenticated visitors) but writable only by designated administrators.
+ * This addresses the need for a public landing page whose content can be managed dynamically.
  *
  * Data Structure:
- * - /appConfig/{configId}: Contains singleton configuration documents like
- *   `/appConfig/landingPage`.
- * - /roles_admin/{userId}: A collection where the document ID is the UID of an
- *   administrator. The presence of a document indicates admin status. This
- *   collection should be managed via the Firebase Console or a secure backend,
-
- *   not by client applications.
+ * - /appConfig/{configId}: A collection containing singleton configuration documents. The primary document is /appConfig/landingPage.
+ * - /roles_admin/{uid}: A separate, top-level collection that explicitly grants administrator privileges. The existence
+ *   of a document with a user's UID as its ID signifies that the user is an admin. This collection is not readable
+ *   or writable by any client to prevent discovery of who the administrators are.
  *
  * Key Security Decisions:
- * - Public Read Access: The `/appConfig` collection is readable by anyone to
- *   ensure the application can load its configuration for all visitors.
- * - Admin-Only Writes: All write operations (create, update, delete) are
- *   strictly limited to users whose UID is present in the `/roles_admin`
- *   collection.
- * - Client-Side Lockdown of Roles: The `/roles_admin` collection is locked
- *   down completely from any client-side read or write operations to prevent
- *   users from discovering or modifying administrator roles.
- * - Note on 'auth/operation-not-allowed': The user's reported error typically
- *   indicates that the sign-in providers (e.g., Anonymous, Email/Password)
- *   are not enabled in the Firebase Authentication settings in the Firebase
- *   Console. This ruleset assumes authentication is configured correctly.
+ * - Public Read, Admin Write: The /appConfig collection is publicly readable to serve the landing page to all visitors.
+ *   All write operations (create, update, delete) are restricted to users identified as administrators.
+ * - Decoupled Admin Roles: Administrator status is determined by checking for a document in the /roles_admin collection.
+ *   This avoids embedding roles directly into the configuration data, resulting in cleaner and more performant rules.
+ *   This is a form of Database Access Control (DBAC).
+ * - Client-Side Admin Management is Disallowed: For maximum security, the list of administrators in /roles_admin
+ *   cannot be modified or viewed from the client. Admin roles must be managed directly in the Firebase Console
+ *   or through a trusted server-side process (e.g., a Cloud Function).
  *
- * Denormalization for Authorization:
- * This ruleset uses a Database Access Control (DBAC) pattern by storing
- * administrator roles in a dedicated `/roles_admin` collection. A simple and
- * highly performant `exists()` check on this collection is used for
- * authorization, which avoids slow, costly, or impossible security checks
- * that would otherwise require `get()` calls.
+ * Note on `auth/operation-not-allowed` Error: The user-reported error 'auth/operation-not-allowed' is not a
+ * Firestore Security Rules issue. It indicates that an authentication method (e.g., Anonymous or Email/Password)
+ * is not enabled in the Firebase Console under the "Authentication > Sign-in method" tab. This must be fixed in the
+ * project settings for users to be able to sign in.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -51,73 +39,40 @@ service cloud.firestore {
     }
 
     /**
-     * Checks if the authenticated user is an administrator.
-     * Admin status is determined by the existence of a document corresponding
-     * to their UID in the '/roles_admin' collection.
+     * Checks if the user has administrative privileges.
+     * Admin status is granted if a document with the user's UID exists in the /roles_admin collection.
+     * This is a performant check that does not require reading the document's content.
      */
     function isAdmin() {
       return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
     }
 
     /**
-     * Verifies that a document exists before an update or delete operation.
-     * Prevents operations on non-existent documents.
-     */
-    function isExistingDoc() {
-      return resource != null;
-    }
-
-    /**
-     * Validates required relational fields on document creation.
-     * Ensures the document's internal `id` matches its path ID.
-     */
-    function isCreateDataValid(configId) {
-      return request.resource.data.id == configId;
-    }
-
-    /**
-     * Ensures critical relational fields are immutable on update.
-     * Prevents the document's internal `id` from being changed.
-     */
-    function isUpdateDataValid() {
-      return request.resource.data.id == resource.data.id;
-    }
-
-    /**
-     * @description
-     *   Controls access to the global application configuration documents,
-     *   such as the landing page settings.
+     * @description Rules for the global application configuration.
+     *   This data is publicly readable but can only be modified by administrators.
      * @path /appConfig/{configId}
-     * @allow (get) Any user, signed-in or anonymous, can read a config document.
-     * @allow (update) An authenticated admin user (UID exists in /roles_admin)
-     *   can update an existing document.
-     * @deny (create) A regular authenticated user attempts to create a new
-     *   configuration document.
-     * @principle
-     *   Implements a public-read, admin-only write model using a separate
-     *   roles collection for authorization (DBAC).
+     * @allow (get) Any user, authenticated or not, reading the landing page configuration.
+     * @deny (update) A non-administrative signed-in user trying to change the welcome message.
+     * @principle Enforces a "Public Read, Admin Write" model using a decoupled roles collection for authorization.
      */
     match /appConfig/{configId} {
-      allow get, list: if true;
-      allow create: if isAdmin() && isCreateDataValid(configId);
-      allow update: if isAdmin() && isExistingDoc() && isUpdateDataValid();
-      allow delete: if isAdmin() && isExistingDoc();
+      allow get: if true;
+      allow list: if true;
+      allow create: if isAdmin();
+      allow update: if isAdmin() && resource != null;
+      allow delete: if isAdmin() && resource != null;
     }
 
     /**
-     * @description
-     *   Secures the collection that stores administrator user IDs. This
-     *   collection is used as the source of truth for role-based access
-     *   control throughout the application.
+     * @description Rules for the admin roles collection.
+     *   This collection is used as a lookup table to grant admin privileges. It is locked down completely
+     *   from client-side access to prevent users from discovering who the administrators are.
      * @path /roles_admin/{userId}
-     * @allow No client-side operations are permitted. This collection must be
-     *   managed via the Firebase Console or a trusted server environment.
-     * @deny Any user attempting to read or write to this collection from the
-     *   client application will be denied.
-     * @principle
-     *   Protects sensitive authorization data from all client access,
-     *   preventing users from discovering who the administrators are or
-     *   attempting to elevate their own privileges.
+     * @allow (none) No client-side operations are permitted.
+     * @deny (get) Any user attempting to check if another user is an admin.
+     * @deny (list) Any user attempting to get a list of all administrators.
+     * @principle Secures sensitive authorization data by denying all direct client access. Admin roles
+     *   should be managed via the Firebase Console or a trusted backend environment.
      */
     match /roles_admin/{userId} {
       allow get: if false;
