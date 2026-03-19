@@ -231,20 +231,16 @@ export default function AdminDashboardPage() {
     const verifyAdmin = async () => {
       if (!firestore) return;
 
-      // The hardcoded credential check (admin/admin123) is handled on the login page.
-      // After login, that user is authenticated as jcesperanza@neu.edu.ph,
-      // so checking the email here covers that case.
-
-      // 1. Check for the professor's specific email address.
-      const isProfessor = user.email === 'jcesperanza@neu.edu.ph';
+      // 1. Check for special admin emails
+      const isAdminByEmail = user.email === 'jcesperanza@neu.edu.ph' || user.email === 'alvin.antoniojr@neu.edu.ph';
 
       // 2. Check if the user's UID exists in the admin roles collection.
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
       const adminDoc = await getDoc(adminRoleRef);
       const hasAdminRole = adminDoc.exists();
 
-      if (isProfessor || hasAdminRole) {
-        // If they are the professor OR have the admin role, grant access.
+      if (isAdminByEmail || hasAdminRole) {
+        // If they are a special admin OR have the admin role, grant access.
         setIsAdmin(true);
       } else {
         // If neither condition is met, deny access.

@@ -86,8 +86,9 @@ export default function LoginPage() {
         try {
           const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
           const adminDoc = await getDoc(adminRoleRef);
+          const isAdminByEmail = user.email === 'jcesperanza@neu.edu.ph' || user.email === 'alvin.antoniojr@neu.edu.ph';
           
-          if (adminDoc.exists() || user.email === 'jcesperanza@neu.edu.ph') {
+          if (adminDoc.exists() || isAdminByEmail) {
             // User is an admin, go to admin dashboard.
             toast({ title: 'Admin Login Successful' });
             router.push('/admin/dashboard');
@@ -170,9 +171,9 @@ export default function LoginPage() {
       // After successful authentication, check if the user has admin rights
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', loggedInUser.uid);
       const adminDoc = await getDoc(adminRoleRef);
-      const isProfessor = loggedInUser.email === 'jcesperanza@neu.edu.ph';
+      const isAdminByEmail = loggedInUser.email === 'jcesperanza@neu.edu.ph' || loggedInUser.email === 'alvin.antoniojr@neu.edu.ph';
 
-      if (adminDoc.exists() || isProfessor) {
+      if (adminDoc.exists() || isAdminByEmail) {
         toast({ title: 'Admin Login Successful' });
         router.push('/admin/dashboard'); // Redirect to Admin Dashboard
       } else {
