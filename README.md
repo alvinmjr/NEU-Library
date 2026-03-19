@@ -1,4 +1,4 @@
 # Firebase Studio
 
 ## Live Application
-[NEU Library](https://your-vercel-url.vercel.app)
+[NEU Library](https://https://neu-library-tau.vercel.app/)
