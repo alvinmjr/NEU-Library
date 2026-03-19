@@ -220,38 +220,45 @@ export default function AdminDashboardPage() {
   }, [filteredVisits]);
 
   useEffect(() => {
-    if (isUserLoading) return;
+    if (isUserLoading) return; // Wait until user auth state is resolved
+
     if (!user) {
+      // If no user is logged in, redirect to the login page.
       router.push('/login');
       return;
     }
 
-    const checkAdminStatus = async () => {
-      if (!firestore || !user) return;
+    const verifyAdmin = async () => {
+      if (!firestore) return;
 
-      // Check for professor's email
-      if (user.email === 'jcesperanza@neu.edu.ph') {
-        setIsAdmin(true);
-        return;
-      }
+      // The hardcoded credential check (admin/admin123) is handled on the login page.
+      // After login, that user is authenticated as jcesperanza@neu.edu.ph,
+      // so checking the email here covers that case.
 
-      // Check Firestore for admin role
+      // 1. Check for the professor's specific email address.
+      const isProfessor = user.email === 'jcesperanza@neu.edu.ph';
+
+      // 2. Check if the user's UID exists in the admin roles collection.
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
-      const docSnap = await getDoc(adminRoleRef);
-      if (docSnap.exists()) {
+      const adminDoc = await getDoc(adminRoleRef);
+      const hasAdminRole = adminDoc.exists();
+
+      if (isProfessor || hasAdminRole) {
+        // If they are the professor OR have the admin role, grant access.
         setIsAdmin(true);
       } else {
+        // If neither condition is met, deny access.
         toast({
           variant: 'destructive',
           title: 'Access Denied',
           description: 'You do not have permission to access the admin dashboard.',
         });
         setIsAdmin(false);
-        router.push('/dashboard'); // Redirect to user dashboard
+        router.push('/dashboard'); // Redirect non-admins away.
       }
     };
 
-    checkAdminStatus();
+    verifyAdmin();
   }, [user, isUserLoading, router, firestore, toast]);
 
   const handleSignOut = () => {
