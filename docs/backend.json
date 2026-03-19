@@ -1,63 +1,313 @@
 {
   "entities": {
-    "LandingPageConfig": {
+    "UserProfile": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "LandingPageConfig",
+      "title": "UserProfile",
       "type": "object",
-      "description": "Represents the configurable settings and content for the application's landing page.",
+      "description": "Represents a user's profile within the library system, storing non-authentication related information.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the LandingPageConfig entity."
+          "description": "Unique identifier for the UserProfile entity."
         },
-        "welcomeMessage": {
+        "email": {
           "type": "string",
-          "description": "The prominent welcoming message displayed on the landing page."
+          "description": "User's email address, used for communication (not authentication).",
+          "format": "email"
         },
-        "backgroundImageUrl": {
+        "firstName": {
           "type": "string",
-          "description": "The URL of the background image for the landing page.",
-          "format": "uri"
+          "description": "The user's first name."
         },
-        "createdAt": {
+        "lastName": {
           "type": "string",
-          "description": "Timestamp when this landing page configuration was created.",
-          "format": "date-time"
+          "description": "The user's last name."
         },
-        "updatedAt": {
+        "libraryCardNumber": {
           "type": "string",
-          "description": "Timestamp when this landing page configuration was last updated.",
+          "description": "Unique identifier for the user's library card."
+        },
+        "membershipStatus": {
+          "type": "string",
+          "description": "The current status of the user's library membership (e.g., 'active', 'suspended', 'expired')."
+        },
+        "joinedDate": {
+          "type": "string",
+          "description": "The date and time when the user joined the library.",
           "format": "date-time"
         }
       },
       "required": [
         "id",
-        "welcomeMessage",
-        "backgroundImageUrl",
-        "createdAt",
-        "updatedAt"
+        "email",
+        "firstName",
+        "lastName",
+        "libraryCardNumber",
+        "membershipStatus",
+        "joinedDate"
+      ]
+    },
+    "Author": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Author",
+      "type": "object",
+      "description": "Represents an author of books.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Author entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The full name of the author."
+        },
+        "biography": {
+          "type": "string",
+          "description": "A brief biography or description of the author."
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "description": "The author's date of birth.",
+          "format": "date"
+        },
+        "dateOfDeath": {
+          "type": "string",
+          "description": "The author's date of death, if applicable.",
+          "format": "date"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Genre": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Genre",
+      "type": "object",
+      "description": "Represents a category or genre for books.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Genre entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the genre (e.g., 'Fantasy', 'Science Fiction', 'History')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the genre."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Book": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Book",
+      "type": "object",
+      "description": "Represents a book available in the library.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Book entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the book."
+        },
+        "isbn": {
+          "type": "string",
+          "description": "The International Standard Book Number (ISBN), a unique commercial book identifier."
+        },
+        "publicationYear": {
+          "type": "number",
+          "description": "The year the book was published."
+        },
+        "publisher": {
+          "type": "string",
+          "description": "The name of the publisher."
+        },
+        "description": {
+          "type": "string",
+          "description": "A summary or synopsis of the book."
+        },
+        "availableCopies": {
+          "type": "number",
+          "description": "The number of copies currently available for loan."
+        },
+        "totalCopies": {
+          "type": "number",
+          "description": "The total number of copies of this book owned by the library."
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Reference to the Author of the book. (Relationship: Author 1:N Book)"
+        },
+        "genreIds": {
+          "type": "array",
+          "description": "References to Genres associated with this book. (Relationship: Genre N:N Book)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "isbn",
+        "publicationYear",
+        "publisher",
+        "description",
+        "availableCopies",
+        "totalCopies",
+        "authorId"
+      ]
+    },
+    "Loan": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Loan",
+      "type": "object",
+      "description": "Represents an instance of a book being borrowed by a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Loan entity."
+        },
+        "bookId": {
+          "type": "string",
+          "description": "Reference to the Book that was loaned. (Relationship: Book 1:N Loan)"
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to the UserProfile who borrowed the book. (Relationship: UserProfile 1:N Loan)"
+        },
+        "loanDate": {
+          "type": "string",
+          "description": "The date and time the book was borrowed.",
+          "format": "date-time"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date and time the book is due to be returned.",
+          "format": "date-time"
+        },
+        "returnDate": {
+          "type": "string",
+          "description": "The actual date and time the book was returned, if applicable.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the loan (e.g., 'borrowed', 'returned', 'overdue')."
+        }
+      },
+      "required": [
+        "id",
+        "bookId",
+        "userProfileId",
+        "loanDate",
+        "dueDate",
+        "status"
       ]
     }
   },
   "auth": {
     "providers": [
       "password",
-      "google.com"
+      "anonymous"
     ]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/appConfig/landingPage",
+        "path": "/user_profiles/{userProfileId}",
         "definition": {
-          "entityName": "LandingPageConfig",
+          "entityName": "UserProfile",
           "schema": {
-            "$ref": "#/backend/entities/LandingPageConfig"
+            "$ref": "#/backend/entities/UserProfile"
           },
-          "description": "Global singleton document containing the configuration for the application's landing page. This document holds details like the welcome message and background image URL. It is publicly readable by all users (authenticated or unauthenticated) and writable only by designated administrators. Authorization for writes relies on the existence of the user's UID in a separate global administrator roles collection (e.g., '/roles_admin/{uid}'), ensuring authorization independence."
+          "description": "Stores user-specific profile information. The `userProfileId` directly corresponds to the Firebase Auth UID (`request.auth.uid`), providing denormalized ownership for authorization independence.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier of the user profile, matching the Firebase Auth UID."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/authors/{authorId}",
+        "definition": {
+          "entityName": "Author",
+          "schema": {
+            "$ref": "#/backend/entities/Author"
+          },
+          "description": "Contains public information about authors. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
+          "params": [
+            {
+              "name": "authorId",
+              "description": "The unique identifier of the author."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/genres/{genreId}",
+        "definition": {
+          "entityName": "Genre",
+          "schema": {
+            "$ref": "#/backend/entities/Genre"
+          },
+          "description": "Contains public information about book genres. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
+          "params": [
+            {
+              "name": "genreId",
+              "description": "The unique identifier of the genre."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/books/{bookId}",
+        "definition": {
+          "entityName": "Book",
+          "schema": {
+            "$ref": "#/backend/entities/Book"
+          },
+          "description": "Contains public information about books available in the library. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
+          "params": [
+            {
+              "name": "bookId",
+              "description": "The unique identifier of the book."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/loans/{loanId}",
+        "definition": {
+          "entityName": "Loan",
+          "schema": {
+            "$ref": "#/backend/entities/Loan"
+          },
+          "description": "Stores individual loan records, nested under the user's path. The `userId` in the path (which must match `request.auth.uid`) provides denormalized ownership for authorization independence. The `userProfileId` field within the document should match the `userId` from the path.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who borrowed the book, matching their Firebase Auth UID."
+            },
+            {
+              "name": "loanId",
+              "description": "The unique identifier for the loan record."
+            }
+          ]
         }
       }
     ],
-    "reasoning": "The application requires a simple, global configuration for its landing page, represented by the `LandingPageConfig` entity. To align with the core design principles, especially Authorization Independence and Structural Segregation, the recommended structure is a singleton document within a dedicated collection.\n\n**Authorization Independence:** The `LandingPageConfig` document at `/appConfig/landingPage` is designed for global read access by all users, including unauthenticated ones, as it's the public face of the application. Its read authorization (`allow read: if true;`) is inherently independent as it doesn't rely on `get()` calls to other documents. For write authorization, to allow only administrators to modify the landing page configuration, we leverage the DBAC (Database Access Control) principle. Instead of embedding roles or permissions within the `LandingPageConfig` document itself, write access will be granted based on the existence of a corresponding document in a separate `/roles_admin/{uid}` collection. This ensures that the authorization logic for writes is decoupled from the `LandingPageConfig` data, making rule evaluation atomic and independent of hierarchical data dependencies. For example, a rule would check `allow write: if request.auth != null && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));`. This completely avoids `get()` operations on parent or related documents for authorization.\n\n**Structural Segregation:** Placing the `LandingPageConfig` as a single document in `/appConfig/landingPage` provides a clear and homogeneous security posture: public read, admin write. This collection is solely for global application configurations, ensuring that data with different access requirements is not mixed, simplifying security rules significantly.\n\n**QAPs (Rules are not Filters):** This structure inherently supports secure `list` operations (though `list` for a single document is effectively a `get` by a known ID) and efficient rule evaluation. For reads, any user can query `/appConfig/landingPage` directly, and the rule `allow read: if true;` will immediately grant access without any data filtering. For writes, an admin user attempting to update this document will be checked against the existence of their UID in `/roles_admin`. This `exists()` check is a direct, non-filtering operation, ensuring that write operations are evaluated securely and efficiently without iterating through potential documents or filtering results. All users will only see the single `landingPage` document, matching its public-read intent.\n\nRegarding the `auth/operation-not-allowed` error mentioned in the user request, this is typically an issue with Firebase Authentication provider settings. It indicates that either 'password' or 'anonymous' authentication (or both) are not enabled in the Firebase project's Authentication settings, or there's an issue with the client-side code attempting to use an unsupported provider. This is an authentication configuration issue, distinct from the Firestore data structure, but crucial for the app's login/signup functionality."
+    "reasoning": "This Firestore data structure is designed with a strong emphasis on security, scalability, and debuggability, adhering to the core design principles provided. It utilizes path-based authorization, structural segregation, and denormalization to ensure robust security rules and efficient data access.\n\nAuthorization Independence & Denormalization:\n1.  UserProfile Data (`/user_profiles/{userProfileId}`): Each user's profile is stored in a top-level collection, with the document ID (`userProfileId`) directly matching the user's Firebase Authentication UID (`request.auth.uid`). This denormalizes ownership directly into the document path, making authorization rules atomic (e.g., `allow read, update, delete: if request.auth.uid == userProfileId;`). No `get()` calls to parent documents are necessary for profile access control.\n2.  Loan Data (`/users/{userId}/loans/{loanId}`): Loan records are nested under a user-specific path. The `userId` wildcard in the path *is* the primary denormalized authorization context, which must match `request.auth.uid`. This explicitly links each loan to its owner at the path level. While the `Loan` entity schema also contains `userProfileId`, its presence in the path provides the necessary context for rules, eliminating cross-document `get()` dependencies for authorization. For instance, `allow read, create: if request.auth.uid == userId;` is self-contained.\n3.  Public Data (`/authors`, `/genres`, `/books`): These collections hold publicly readable information about the library's content. Their access rules do not rely on `get()` calls for authorization. Write access to these collections would be restricted to administrative roles, ensuring data integrity without complex dependencies.\n\nQAPs (Rules are not Filters):\n1.  User-Specific Data (`UserProfile`, `Loan`): Path-based ownership naturally supports Queryable Access Patterns (QAPs). A user can easily retrieve their own `UserProfile` by knowing their `uid`. For `Loans`, a user can `list` all their loans by querying `/users/$(request.auth.uid)/loans`. Firestore rules can directly enforce `allow list: if request.auth.uid == userId;`, ensuring that the database only returns documents belonging to the requesting user, preventing the need for client-side filtering or inefficient server-side rule filtering.\n2.  Public Data (`Authors`, `Genres`, `Books`): These collections are designed for universal read access. `list` operations will return all documents, allowing any user to browse the library's catalog. This fulfills the QAP without requiring any filtering based on user identity for read access.\n\nStructural Segregation:\nData is segregated into collections with distinct security postures:\n*   `/user_profiles`: For private, user-owned profile data.\n*   `/users/{userId}/loans`: For private, user-owned loan records.\n*   `/authors`, `/genres`, `/books`: For publicly browsable library content.\n\nDBAC (Database-Backed Access Control):\nFor administrative roles (e.g., managing Authors, Genres, Books), the DBAC principle mandates roles be stored in the database. Ideally, this would be implemented by a dedicated collection like `/roles_admin/{userId}`, where the mere existence of a document for a `userId` grants administrative privileges. However, as the provided `backend.entities` schema does not include a 'Role' entity, a specific path for `roles_admin` cannot be included in the `firestorePaths` array while strictly adhering to the output schema's requirement for `definition.schema.$ref` to a defined entity. In a full implementation, a 'Role' entity would be defined, allowing for this critical segregation of authorization data and fulfilling the 'Existence over Content' mandate for roles."
   }
 }

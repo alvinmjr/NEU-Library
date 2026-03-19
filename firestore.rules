@@ -1,85 +1,123 @@
 /**
- * This ruleset enforces a security model for a global application configuration.
- *
- * Core Philosophy: The ruleset is designed to be highly secure yet simple. It manages a public-facing configuration
- * that is readable by anyone (including unauthenticated visitors) but writable only by designated administrators.
- * This addresses the need for a public landing page whose content can be managed dynamically.
+ * Core Philosophy:
+ * This ruleset enforces a security model that strictly segregates private user data from public library data.
+ * The primary goal is to ensure that users can only access and manage their own information (profiles, loans)
+ * while allowing them to browse the public library catalog (books, authors, genres).
  *
  * Data Structure:
- * - /appConfig/{configId}: A collection containing singleton configuration documents. The primary document is /appConfig/landingPage.
- * - /roles_admin/{uid}: A separate, top-level collection that explicitly grants administrator privileges. The existence
- *   of a document with a user's UID as its ID signifies that the user is an admin. This collection is not readable
- *   or writable by any client to prevent discovery of who the administrators are.
+ * - /user_profiles/{userProfileId}: Stores private user profile information. The document ID matches the user's Auth UID.
+ * - /users/{userId}/loans/{loanId}: Nests a user's private loan history under a path containing their Auth UID.
+ * - /authors/{authorId}, /genres/{genreId}, /books/{bookId}: Top-level collections for publicly readable library catalog data.
  *
  * Key Security Decisions:
- * - Public Read, Admin Write: The /appConfig collection is publicly readable to serve the landing page to all visitors.
- *   All write operations (create, update, delete) are restricted to users identified as administrators.
- * - Decoupled Admin Roles: Administrator status is determined by checking for a document in the /roles_admin collection.
- *   This avoids embedding roles directly into the configuration data, resulting in cleaner and more performant rules.
- *   This is a form of Database Access Control (DBAC).
- * - Client-Side Admin Management is Disallowed: For maximum security, the list of administrators in /roles_admin
- *   cannot be modified or viewed from the client. Admin roles must be managed directly in the Firebase Console
- *   or through a trusted server-side process (e.g., a Cloud Function).
+ * - User Ownership: All access to /user_profiles and /users/{userId}/loans is strictly limited to the authenticated owner of that data.
+ * - Public Data Protection: The library catalog collections are readable by any authenticated user but are write-protected. Since no administrative role is defined in the data model, all write operations are currently disabled to ensure data integrity.
+ * - No User Enumeration: Listing documents in the top-level /user_profiles collection is explicitly disallowed to protect user privacy.
+ * - Relational Integrity: On creation, rules validate that internal ownership fields (e.g., `userProfileId` in a Loan document) match the user ID in the path, ensuring data consistency. These fields are immutable on update.
+ * - Note on `auth/operation-not-allowed`: The user-reported error often indicates that a sign-in method (like Anonymous Authentication) is used in the app but is not enabled in the Firebase Authentication settings in the Firebase Console. Please verify your enabled providers.
  *
- * Note on `auth/operation-not-allowed` Error: The user-reported error 'auth/operation-not-allowed' is not a
- * Firestore Security Rules issue. It indicates that an authentication method (e.g., Anonymous or Email/Password)
- * is not enabled in the Firebase Console under the "Authentication > Sign-in method" tab. This must be fixed in the
- * project settings for users to be able to sign in.
+ * Denormalization for Authorization:
+ * This ruleset relies on denormalization for efficient and secure authorization. User ownership is embedded directly in the document paths (`/users/{userId}` or `/user_profiles/{userId}`), which eliminates the need for slow and costly cross-document `get()` calls in security rules.
+ *
+ * Structural Segregation:
+ * The data model separates private, user-owned data (`user_profiles`, `loans`) into distinct paths from publicly accessible data (`authors`, `genres`, `books`). This segregation simplifies rules, improves query performance, and enhances security by preventing accidental data exposure.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
-    /**
-     * Checks if the user is authenticated.
-     */
+    // Helper functions for reusable logic
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the user has administrative privileges.
-     * Admin status is granted if a document with the user's UID exists in the /roles_admin collection.
-     * This is a performant check that does not require reading the document's content.
-     */
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
+    // Checks if the currently signed-in user's UID matches the provided userId.
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    // Verifies ownership for an existing document, preventing writes to non-existent data.
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Rules for the global application configuration.
-     *   This data is publicly readable but can only be modified by administrators.
-     * @path /appConfig/{configId}
-     * @allow (get) Any user, authenticated or not, reading the landing page configuration.
-     * @deny (update) A non-administrative signed-in user trying to change the welcome message.
-     * @principle Enforces a "Public Read, Admin Write" model using a decoupled roles collection for authorization.
+     * @description Manages user profiles. A user can create, read, and modify their own profile.
+     * @path /user_profiles/{userProfileId}
+     * @allow (create) An authenticated user creating their own profile document, where the document ID matches their UID.
+     * @deny (list) Any user attempting to list all profiles in the collection.
+     * @principle Restricts access to a user's own data tree and prevents user enumeration.
      */
-    match /appConfig/{configId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if isAdmin();
-      allow update: if isAdmin() && resource != null;
-      allow delete: if isAdmin() && resource != null;
-    }
-
-    /**
-     * @description Rules for the admin roles collection.
-     *   This collection is used as a lookup table to grant admin privileges. It is locked down completely
-     *   from client-side access to prevent users from discovering who the administrators are.
-     * @path /roles_admin/{userId}
-     * @allow (none) No client-side operations are permitted.
-     * @deny (get) Any user attempting to check if another user is an admin.
-     * @deny (list) Any user attempting to get a list of all administrators.
-     * @principle Secures sensitive authorization data by denying all direct client access. Admin roles
-     *   should be managed via the Firebase Console or a trusted backend environment.
-     */
-    match /roles_admin/{userId} {
-      allow get: if false;
+    match /user_profiles/{userProfileId} {
+      allow create: if isOwner(userProfileId) && request.resource.data.id == userProfileId;
+      allow get: if isOwner(userProfileId);
       allow list: if false;
+      allow update: if isExistingOwner(userProfileId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userProfileId);
+    }
+
+    /**
+     * @description Publicly readable author information. Write access is disabled pending an admin role definition.
+     * @path /authors/{authorId}
+     * @allow (get, list) Any authenticated user can read author data.
+     * @deny (create, update, delete) Any user attempting to modify the author list.
+     * @principle Secures public data by making it read-only for clients.
+     */
+    match /authors/{authorId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
       allow create: if false;
       allow update: if false;
       allow delete: if false;
+    }
+
+    /**
+     * @description Publicly readable genre information. Write access is disabled pending an admin role definition.
+     * @path /genres/{genreId}
+     * @allow (get, list) Any authenticated user can read genre data.
+     * @deny (create, update, delete) Any user attempting to modify the genre list.
+     * @principle Secures public data by making it read-only for clients.
+     */
+    match /genres/{genreId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Publicly readable book information. Write access is disabled pending an admin role definition.
+     * @path /books/{bookId}
+     * @allow (get, list) Any authenticated user can read book data.
+     * @deny (create, update, delete) Any user attempting to modify the book catalog.
+     * @principle Secures public data by making it read-only for clients.
+     */
+    match /books/{bookId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // This match block groups all user-specific subcollections.
+    match /users/{userId} {
+      
+      /**
+       * @description Manages a user's loan records. Users can fully manage their own loan history.
+       * @path /users/{userId}/loans/{loanId}
+       * @allow (create) An authenticated user creating a loan record for themselves under their own user path.
+       * @deny (get) A user attempting to read another user's loan records.
+       * @principle Enforces document ownership for all operations and validates relational integrity.
+       */
+      match /loans/{loanId} {
+        allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+        allow delete: if isExistingOwner(userId);
+      }
     }
   }
 }
