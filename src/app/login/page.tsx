@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -126,7 +125,6 @@ export default function LoginPage() {
     }
   }, [user, isUserLoading, router, firestore, toast, auth]);
 
-
   function handleStudentLogin(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
     if (!auth) {
@@ -166,28 +164,27 @@ export default function LoginPage() {
 
       let userCredential;
 
-      // Case 1: Hardcoded credentials for the professor's account
-      if (email.toLowerCase() === 'admin' && password === 'admin123') {
-        // Attempt to sign in as the designated professor.
-        // IMPORTANT: The password for 'jcesperanza@neu.edu.ph' MUST be 'admin123' in Firebase Auth for this to work.
-        userCredential = await signInWithEmailAndPassword(auth, 'jcesperanza@neu.edu.ph', 'admin123');
+      // Case 1: Hardcoded credentials for admin login
+      if (email === 'AdminAccount' && password === '123456789') {
+        // Sign in with the professor's email
+        userCredential = await signInWithEmailAndPassword(auth, 'jcesperanza@neu.edu.ph', '123456789');
       } else {
-        // Case 2: Any other email/password, attempt to sign in and then check if they are an admin
+        // Case 2: Attempt to sign in with the provided email and password
         userCredential = await signInWithEmailAndPassword(auth, email, password);
       }
-      
+
       const loggedInUser = userCredential.user;
 
-      // After successful authentication, verify if the user has admin rights.
+      // After successful authentication, check if the user has admin rights
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', loggedInUser.uid);
       const adminDoc = await getDoc(adminRoleRef);
       const isProfessor = loggedInUser.email === 'jcesperanza@neu.edu.ph';
 
       if (adminDoc.exists() || isProfessor) {
         toast({ title: 'Admin Login Successful' });
-        router.push('/admin/dashboard');
+        router.push('/admin/dashboard'); // Redirect to Admin Dashboard
       } else {
-        // If the user authenticated but isn't an admin, sign them out immediately.
+        // If the user isn't an admin, sign them out
         await auth.signOut();
         toast({
           variant: 'destructive',
@@ -195,9 +192,8 @@ export default function LoginPage() {
           description: 'You do not have administrative privileges.',
         });
       }
-
     } catch (error: any) {
-      // This will catch authentication errors like wrong password or user not found.
+      // Authentication error handling
       toast({
         variant: 'destructive',
         title: 'Admin Login Failed',
@@ -207,7 +203,6 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   }
-
 
   return (
     <div className="w-full min-h-screen">
@@ -221,7 +216,7 @@ export default function LoginPage() {
           className="object-cover z-0"
         />
       )}
-      <div className="absolute inset-0 bg-background/80 z-10" />
+      <div className="absolute inset-0 bg-background/80 z-10" /> 
 
       <div className="relative z-20 flex flex-col min-h-screen items-center justify-center p-4">
         <div className="absolute top-4 left-4">
