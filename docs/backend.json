@@ -218,96 +218,39 @@
   "auth": {
     "providers": [
       "password",
-      "anonymous"
+      "google.com"
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/user_profiles/{userProfileId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores user-specific profile information. The `userProfileId` directly corresponds to the Firebase Auth UID (`request.auth.uid`), providing denormalized ownership for authorization independence.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier of the user profile, matching the Firebase Auth UID."
-            }
-          ]
-        }
+    "/user_profiles/{userProfileId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
       },
-      {
-        "path": "/authors/{authorId}",
-        "definition": {
-          "entityName": "Author",
-          "schema": {
-            "$ref": "#/backend/entities/Author"
-          },
-          "description": "Contains public information about authors. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
-          "params": [
-            {
-              "name": "authorId",
-              "description": "The unique identifier of the author."
-            }
-          ]
-        }
+      "description": "Stores user-specific profile information. The `userProfileId` directly corresponds to the Firebase Auth UID (`request.auth.uid`), providing denormalized ownership for authorization independence."
+    },
+    "/authors/{authorId}": {
+      "schema": {
+        "$ref": "#/entities/Author"
       },
-      {
-        "path": "/genres/{genreId}",
-        "definition": {
-          "entityName": "Genre",
-          "schema": {
-            "$ref": "#/backend/entities/Genre"
-          },
-          "description": "Contains public information about book genres. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
-          "params": [
-            {
-              "name": "genreId",
-              "description": "The unique identifier of the genre."
-            }
-          ]
-        }
+      "description": "Contains public information about authors. Accessible for read by all authenticated users. Write access is restricted to administrative roles."
+    },
+    "/genres/{genreId}": {
+      "schema": {
+        "$ref": "#/entities/Genre"
       },
-      {
-        "path": "/books/{bookId}",
-        "definition": {
-          "entityName": "Book",
-          "schema": {
-            "$ref": "#/backend/entities/Book"
-          },
-          "description": "Contains public information about books available in the library. Accessible for read by all authenticated users. Write access is restricted to administrative roles.",
-          "params": [
-            {
-              "name": "bookId",
-              "description": "The unique identifier of the book."
-            }
-          ]
-        }
+      "description": "Contains public information about book genres. Accessible for read by all authenticated users. Write access is restricted to administrative roles."
+    },
+    "/books/{bookId}": {
+      "schema": {
+        "$ref": "#/entities/Book"
       },
-      {
-        "path": "/users/{userId}/loans/{loanId}",
-        "definition": {
-          "entityName": "Loan",
-          "schema": {
-            "$ref": "#/backend/entities/Loan"
-          },
-          "description": "Stores individual loan records, nested under the user's path. The `userId` in the path (which must match `request.auth.uid`) provides denormalized ownership for authorization independence. The `userProfileId` field within the document should match the `userId` from the path.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user who borrowed the book, matching their Firebase Auth UID."
-            },
-            {
-              "name": "loanId",
-              "description": "The unique identifier for the loan record."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "This Firestore data structure is designed with a strong emphasis on security, scalability, and debuggability, adhering to the core design principles provided. It utilizes path-based authorization, structural segregation, and denormalization to ensure robust security rules and efficient data access.\n\nAuthorization Independence & Denormalization:\n1.  UserProfile Data (`/user_profiles/{userProfileId}`): Each user's profile is stored in a top-level collection, with the document ID (`userProfileId`) directly matching the user's Firebase Authentication UID (`request.auth.uid`). This denormalizes ownership directly into the document path, making authorization rules atomic (e.g., `allow read, update, delete: if request.auth.uid == userProfileId;`). No `get()` calls to parent documents are necessary for profile access control.\n2.  Loan Data (`/users/{userId}/loans/{loanId}`): Loan records are nested under a user-specific path. The `userId` wildcard in the path *is* the primary denormalized authorization context, which must match `request.auth.uid`. This explicitly links each loan to its owner at the path level. While the `Loan` entity schema also contains `userProfileId`, its presence in the path provides the necessary context for rules, eliminating cross-document `get()` dependencies for authorization. For instance, `allow read, create: if request.auth.uid == userId;` is self-contained.\n3.  Public Data (`/authors`, `/genres`, `/books`): These collections hold publicly readable information about the library's content. Their access rules do not rely on `get()` calls for authorization. Write access to these collections would be restricted to administrative roles, ensuring data integrity without complex dependencies.\n\nQAPs (Rules are not Filters):\n1.  User-Specific Data (`UserProfile`, `Loan`): Path-based ownership naturally supports Queryable Access Patterns (QAPs). A user can easily retrieve their own `UserProfile` by knowing their `uid`. For `Loans`, a user can `list` all their loans by querying `/users/$(request.auth.uid)/loans`. Firestore rules can directly enforce `allow list: if request.auth.uid == userId;`, ensuring that the database only returns documents belonging to the requesting user, preventing the need for client-side filtering or inefficient server-side rule filtering.\n2.  Public Data (`Authors`, `Genres`, `Books`): These collections are designed for universal read access. `list` operations will return all documents, allowing any user to browse the library's catalog. This fulfills the QAP without requiring any filtering based on user identity for read access.\n\nStructural Segregation:\nData is segregated into collections with distinct security postures:\n*   `/user_profiles`: For private, user-owned profile data.\n*   `/users/{userId}/loans`: For private, user-owned loan records.\n*   `/authors`, `/genres`, `/books`: For publicly browsable library content.\n\nDBAC (Database-Backed Access Control):\nFor administrative roles (e.g., managing Authors, Genres, Books), the DBAC principle mandates roles be stored in the database. Ideally, this would be implemented by a dedicated collection like `/roles_admin/{userId}`, where the mere existence of a document for a `userId` grants administrative privileges. However, as the provided `backend.entities` schema does not include a 'Role' entity, a specific path for `roles_admin` cannot be included in the `firestorePaths` array while strictly adhering to the output schema's requirement for `definition.schema.$ref` to a defined entity. In a full implementation, a 'Role' entity would be defined, allowing for this critical segregation of authorization data and fulfilling the 'Existence over Content' mandate for roles."
+      "description": "Contains public information about books available in the library. Accessible for read by all authenticated users. Write access is restricted to administrative roles."
+    },
+    "/users/{userId}/loans/{loanId}": {
+      "schema": {
+        "$ref": "#/entities/Loan"
+      },
+      "description": "Stores individual loan records, nested under the user's path. The `userId` in the path (which must match `request.auth.uid`) provides denormalized ownership for authorization independence. The `userProfileId` field within the document should match the `userId` from the path."
+    }
   }
 }
