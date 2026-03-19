@@ -241,13 +241,18 @@ export default function AdminDashboardPage() {
       if (docSnap.exists()) {
         setIsAdmin(true);
       } else {
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'You do not have permission to access the admin dashboard.',
+        });
         setIsAdmin(false);
         router.push('/dashboard'); // Redirect to user dashboard
       }
     };
 
     checkAdminStatus();
-  }, [user, isUserLoading, router, firestore]);
+  }, [user, isUserLoading, router, firestore, toast]);
 
   const handleSignOut = () => {
     if (auth) auth.signOut();
