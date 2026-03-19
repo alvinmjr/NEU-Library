@@ -81,12 +81,13 @@ export default function LoginPage() {
   });
 
   React.useEffect(() => {
-    if (isProcessingAdminLogin) return; // Defer to admin-specific logic
+    if (!firestore || isProcessingAdminLogin) return; // Defer to admin-specific logic if it's running
 
     if (user && !isUserLoading) {
       // Check for professor's email first for admin access
       if (user.email === 'jcesperanza@neu.edu.ph') {
-        toast({ title: 'Admin Login Successful' });
+        // No toast here, as the admin login function will show one.
+        // This just handles the case where the admin is already logged in and revisits the page.
         router.push('/admin/dashboard');
         return; // Stop further checks
       }
@@ -97,7 +98,6 @@ export default function LoginPage() {
         .then((docSnap) => {
           if (docSnap.exists()) {
             // User has an admin role
-            toast({ title: 'Admin Login Successful' });
             router.push('/admin/dashboard');
           } else {
             // It's a regular user, ensure their profile exists
@@ -132,6 +132,7 @@ export default function LoginPage() {
         });
     }
   }, [user, isUserLoading, router, firestore, toast, isProcessingAdminLogin, auth]);
+
 
   function handleStudentLogin(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
@@ -168,54 +169,58 @@ export default function LoginPage() {
     setIsSubmitting(true);
     const { email, password } = values;
 
-    // Define the admin credentials
+    // Define admin credentials
     const professorEmail = 'jcesperanza@neu.edu.ph';
     const hardcodedAdminUsername = 'admin';
     const hardcodedAdminPassword = 'admin123';
 
-    let loginEmail = '';
-    let loginPassword = '';
+    let loginEmail = email;
+    let loginPassword = password;
 
-    const isDirectProfessorLogin = email === professorEmail;
-    const isHardcodedAdminLogin = email === hardcodedAdminUsername && password === hardcodedAdminPassword;
-
-    if (isHardcodedAdminLogin) {
-      // For the hardcoded 'admin'/'admin123' login, we use the professor's email.
-      // This requires the professor's account in Firebase Auth to have the password 'admin123'.
+    // If the user enters the hardcoded alias, map it to the professor's email.
+    // This requires that the professor's account in Firebase Auth has 'admin123' as its password.
+    if (email === hardcodedAdminUsername && password === hardcodedAdminPassword) {
       loginEmail = professorEmail;
       loginPassword = hardcodedAdminPassword;
-    } else if (isDirectProfessorLogin) {
-      // For a direct login with the professor's email, use the provided password.
-      loginEmail = professorEmail;
-      loginPassword = password;
-    } else {
-      // Not a valid admin login attempt
-      toast({
-        variant: 'destructive',
-        title: 'Login Failed',
-        description: 'Invalid admin credentials.',
-      });
-      setIsSubmitting(false);
-      setIsProcessingAdminLogin(false);
-      return;
     }
 
     try {
-      if (!auth) throw new Error("Auth service not available");
+      if (!auth || !firestore) throw new Error("Firebase services not available");
+
+      // Step 1: Attempt to sign in with the resolved credentials
+      const userCredential = await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
+      const user = userCredential.user;
+
+      // Step 2: Verify if the successfully logged-in user is an administrator
+      const isProfessor = user.email === professorEmail;
       
-      await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      
-      toast({ title: 'Admin Login Successful' });
-      router.push('/admin/dashboard');
+      const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
+      const adminDoc = await getDoc(adminRoleRef);
+      const hasAdminRole = adminDoc.exists();
+
+      if (isProfessor || hasAdminRole) {
+        // Step 3: User is a verified admin, proceed to dashboard
+        toast({ title: 'Admin Login Successful' });
+        router.push('/admin/dashboard');
+      } else {
+        // Step 3b: User logged in but is not an admin. Sign them out.
+        await auth.signOut();
+        toast({
+          variant: 'destructive',
+          title: 'Access Denied',
+          description: 'You do not have administrative privileges.',
+        });
+      }
     } catch (error: any) {
+      // This catch block handles Firebase authentication errors (e.g., wrong password)
       toast({
         variant: 'destructive',
         title: 'Admin Login Failed',
         description: 'Invalid email or password.',
       });
     } finally {
-        setIsSubmitting(false);
-        setIsProcessingAdminLogin(false);
+      setIsSubmitting(false);
+      setIsProcessingAdminLogin(false);
     }
   }
 
@@ -395,5 +400,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-    
