@@ -46,12 +46,12 @@ const loginSchema = z.object({
 });
 
 const GoogleIcon = () => (
-    <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
-        <path
-        fill="currentColor"
-        d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.05 1.05-2.36 1.67-4.66 1.67-3.86 0-6.99-3.14-6.99-7s3.13-7 6.99-7c2.08 0 3.26.84 4.13 1.65l2.73-2.73C18.72 1.96 15.96 1 12.48 1 5.88 1 1 5.92 1 12.5s4.88 11.5 11.48 11.5c3.54 0 6.3-1.23 8.35-3.37 2.13-2.13 2.8-5.22 2.8-7.78v-1.65h-9.15z"
-        />
-    </svg>
+  <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
+    <path
+      fill="currentColor"
+      d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.05 1.05-2.36 1.67-4.66 1.67-3.86 0-6.99-3.14-6.99-7s3.13-7 6.99-7c2.08 0 3.26.84 4.13 1.65l2.73-2.73C18.72 1.96 15.96 1 12.48 1 5.88 1 1 5.92 1 12.5s4.88 11.5 11.48 11.5c3.54 0 6.3-1.23 8.35-3.37 2.13-2.13 2.8-5.22 2.8-7.78v-1.65h-9.15z"
+    />
+  </svg>
 );
 
 export default function LoginPage() {
@@ -62,6 +62,8 @@ export default function LoginPage() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = React.useState(false);
+  // ✅ Track which login form was used
+  const [loginIntent, setLoginIntent] = React.useState<'student' | 'admin'>('student');
 
   const backgroundImage = PlaceHolderImages.find(
     (p) => p.id === 'library-background'
@@ -83,12 +85,16 @@ export default function LoginPage() {
         try {
           const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
           const adminDoc = await getDoc(adminRoleRef);
-          const isAdminByEmail = user.email === 'jcesperanza@neu.edu.ph' || user.email === 'alvin.antoniojr@neu.edu.ph';
-          
-          if (adminDoc.exists() || isAdminByEmail) {
+          const isAdminByEmail =
+            user.email === 'jcesperanza@neu.edu.ph' ||
+            user.email === 'alvin.antoniojr@neu.edu.ph';
+
+          // ✅ Only redirect to admin dashboard if admin login was used
+          if (loginIntent === 'admin' && (adminDoc.exists() || isAdminByEmail)) {
             toast({ title: 'Admin Login Successful' });
             router.push('/admin/dashboard');
           } else {
+            // ✅ Always go to student dashboard if student login was used
             const memberRef = doc(firestore, 'libraryMembers', user.uid);
             const memberSnap = await getDoc(memberRef);
 
@@ -118,69 +124,71 @@ export default function LoginPage() {
 
       checkUserRoleAndRedirect();
     }
-  }, [user, isUserLoading, router, firestore, toast, auth]);
+  }, [user, isUserLoading, router, firestore, toast, auth, loginIntent]);
 
   function handleStudentLogin(values: z.infer<typeof loginSchema>) {
+    setLoginIntent('student'); // ✅ set intent
     setIsSubmitting(true);
     if (!auth) {
-        toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: "Authentication service is not available.",
-        });
-        setIsSubmitting(false);
-        return;
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'Authentication service is not available.',
+      });
+      setIsSubmitting(false);
+      return;
     }
     initiateEmailSignIn(auth, values.email, values.password)
-        .catch(error => {
-            toast({
-                variant: "destructive",
-                title: "Login Failed",
-                description: "Invalid credentials or another error occurred.",
-            });
-        })
-        .finally(() => {
-            setIsSubmitting(false);
+      .catch(() => {
+        toast({
+          variant: 'destructive',
+          title: 'Login Failed',
+          description: 'Invalid credentials or another error occurred.',
         });
+      })
+      .finally(() => setIsSubmitting(false));
   }
 
-  function handleGoogleSignIn() {
+  // ✅ Now accepts intent parameter
+  function handleGoogleSignIn(intent: 'student' | 'admin' = 'student') {
+    setLoginIntent(intent);
     setIsSubmitting(true);
     if (!auth) {
-        toast({
-            variant: "destructive",
-            title: "Login Failed",
-            description: "Authentication service is not available.",
-        });
-        setIsSubmitting(false);
-        return;
+      toast({
+        variant: 'destructive',
+        title: 'Login Failed',
+        description: 'Authentication service is not available.',
+      });
+      setIsSubmitting(false);
+      return;
     }
     initiateGoogleSignIn(auth)
-        .catch(error => {
-            toast({
-                variant: "destructive",
-                title: "Google Sign-In Failed",
-                description: error.message || "An unknown error occurred.",
-            });
-        })
-        .finally(() => {
-            setIsSubmitting(false);
+      .catch((error) => {
+        toast({
+          variant: 'destructive',
+          title: 'Google Sign-In Failed',
+          description: error.message || 'An unknown error occurred.',
         });
+      })
+      .finally(() => setIsSubmitting(false));
   }
 
   async function handleAdminLogin(values: z.infer<typeof loginSchema>) {
+    setLoginIntent('admin'); // ✅ set intent
     setIsSubmitting(true);
     const { email, password } = values;
 
     try {
-      if (!auth || !firestore) throw new Error("Firebase services not available");
+      if (!auth || !firestore) throw new Error('Firebase services not available');
 
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const loggedInUser = userCredential.user;
 
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', loggedInUser.uid);
       const adminDoc = await getDoc(adminRoleRef);
-      const isAdminByEmail = loggedInUser.email === 'jcesperanza@neu.edu.ph' || loggedInUser.email === 'alvin.antoniojr@neu.edu.ph';
+      const isAdminByEmail =
+        loggedInUser.email === 'jcesperanza@neu.edu.ph' ||
+        loggedInUser.email === 'alvin.antoniojr@neu.edu.ph';
 
       if (adminDoc.exists() || isAdminByEmail) {
         toast({ title: 'Admin Login Successful' });
@@ -216,16 +224,16 @@ export default function LoginPage() {
           className="object-cover z-0"
         />
       )}
-      <div className="absolute inset-0 bg-background/80 z-10" /> 
+      <div className="absolute inset-0 bg-background/80 z-10" />
 
       <div className="relative z-20 flex flex-col min-h-screen items-center justify-center p-4">
         <div className="absolute top-4 left-4">
-            <Button asChild variant="outline">
-                <Link href="/">
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Back to Home
-                </Link>
-            </Button>
+          <Button asChild variant="outline">
+            <Link href="/">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Home
+            </Link>
+          </Button>
         </div>
 
         <Card className="w-full max-w-md">
@@ -277,11 +285,7 @@ export default function LoginPage() {
                     </FormItem>
                   )}
                 />
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? 'Logging In...' : 'Login'}
                 </Button>
               </form>
@@ -297,10 +301,11 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* ✅ Student Google Sign-In passes 'student' intent */}
             <Button
               variant="outline"
               className="w-full"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn('student')}
               disabled={isSubmitting}
             >
               <GoogleIcon />
@@ -308,10 +313,7 @@ export default function LoginPage() {
             </Button>
 
             <div className="mt-4 text-center">
-              <Button
-                variant="link"
-                onClick={() => setIsAdminLoginOpen(true)}
-              >
+              <Button variant="link" onClick={() => setIsAdminLoginOpen(true)}>
                 Admin Login
               </Button>
             </div>
@@ -340,10 +342,7 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel>Admin Email</FormLabel>
                       <FormControl>
-                        <Input
-                          {...field}
-                          disabled={isSubmitting}
-                        />
+                        <Input {...field} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -356,39 +355,31 @@ export default function LoginPage() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input
-                          type="password"
-                          {...field}
-                          disabled={isSubmitting}
-                        />
+                        <Input type="password" {...field} disabled={isSubmitting} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button
-                  type="submit"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
+                <Button type="submit" className="w-full" disabled={isSubmitting}>
                   {isSubmitting ? 'Logging In...' : 'Login as Admin'}
                 </Button>
               </form>
             </Form>
             <div className="relative my-2">
-                <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                    Or
-                    </span>
-                </div>
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or</span>
+              </div>
             </div>
+
+            {/* ✅ Admin Google Sign-In passes 'admin' intent */}
             <Button
               variant="outline"
               className="w-full"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn('admin')}
               disabled={isSubmitting}
             >
               <GoogleIcon />
