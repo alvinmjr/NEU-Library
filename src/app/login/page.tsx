@@ -37,13 +37,23 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth, useFirestore, useUser, initiateEmailSignIn } from '@/firebase';
+import { useAuth, useFirestore, useUser, initiateEmailSignIn, initiateGoogleSignIn } from '@/firebase';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
+import { createLibraryMember } from '@/lib/user-actions';
 
 const loginSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }).or(z.string().min(1)),
   password: z.string().min(1, { message: 'Password is required.' }),
 });
+
+const GoogleIcon = () => (
+    <svg role="img" viewBox="0 0 24 24" className="mr-2 h-4 w-4">
+        <path
+        fill="currentColor"
+        d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.05 1.05-2.36 1.67-4.66 1.67-3.86 0-6.99-3.14-6.99-7s3.13-7 6.99-7c2.08 0 3.26.84 4.13 1.65l2.73-2.73C18.72 1.96 15.96 1 12.48 1 5.88 1 1 5.92 1 12.5s4.88 11.5 11.48 11.5c3.54 0 6.3-1.23 8.35-3.37 2.13-2.13 2.8-5.22 2.8-7.78v-1.65h-9.15z"
+        />
+    </svg>
+);
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,29 +84,54 @@ export default function LoginPage() {
     if (isProcessingAdminLogin) return; // Defer to admin-specific logic
 
     if (user && !isUserLoading) {
-      // This logic is for student login redirection
+      // Check for professor's email first for admin access
+      if (user.email === 'jcesperanza@neu.edu.ph') {
+        toast({ title: 'Admin Login Successful' });
+        router.push('/admin/dashboard');
+        return; // Stop further checks
+      }
+
+      // If not the professor, check for admin role in Firestore
       const adminRoleRef = doc(firestore, 'roles_libraryAdmins', user.uid);
       getDoc(adminRoleRef)
         .then((docSnap) => {
           if (docSnap.exists()) {
-            // A user with admin role tried to log in via student form
-             router.push('/admin/dashboard');
+            // User has an admin role
+            toast({ title: 'Admin Login Successful' });
+            router.push('/admin/dashboard');
           } else {
-            toast({ title: 'Login Successful' });
-            router.push('/dashboard');
+            // It's a regular user, ensure their profile exists
+            const memberRef = doc(firestore, 'libraryMembers', user.uid);
+            getDoc(memberRef).then((memberSnap) => {
+              if (memberSnap.exists()) {
+                toast({ title: 'Login Successful' });
+                router.push('/dashboard');
+              } else {
+                // New user via Google Sign In. Create a profile.
+                if (user.email) {
+                  createLibraryMember(firestore, user, { email: user.email, studentId: '' });
+                  toast({ title: 'Welcome!', description: 'Your account has been created.' });
+                  router.push('/dashboard');
+                } else {
+                  // This case is unlikely with Google Sign-In but good to handle
+                  toast({ variant: 'destructive', title: 'Login Error', description: 'Could not retrieve user email.' });
+                  if (auth) auth.signOut();
+                }
+              }
+            });
           }
         })
         .catch((error) => {
-          console.error('Error checking admin role:', error);
+          console.error('Error checking user role:', error);
           toast({
             variant: 'destructive',
-            title: 'Role Check Failed',
-            description: 'Defaulting to student dashboard.',
+            title: 'Login Failed',
+            description: 'Could not verify your user role.',
           });
-          router.push('/dashboard');
+          if (auth) auth.signOut();
         });
     }
-  }, [user, isUserLoading, router, firestore, toast, isProcessingAdminLogin]);
+  }, [user, isUserLoading, router, firestore, toast, isProcessingAdminLogin, auth]);
 
   function handleStudentLogin(values: z.infer<typeof loginSchema>) {
     setIsSubmitting(true);
@@ -111,6 +146,21 @@ export default function LoginPage() {
     }
     initiateEmailSignIn(auth, values.email, values.password);
     // The useEffect will handle redirection.
+  }
+
+  function handleGoogleSignIn() {
+    setIsSubmitting(true);
+    if (!auth) {
+        toast({
+            variant: "destructive",
+            title: "Login Failed",
+            description: "Authentication service is not available.",
+        });
+        setIsSubmitting(false);
+        return;
+    }
+    initiateGoogleSignIn(auth);
+    // The useEffect will handle redirection and profile creation.
   }
 
   async function handleAdminLogin(values: z.infer<typeof loginSchema>) {
@@ -163,8 +213,9 @@ export default function LoginPage() {
         title: 'Admin Login Failed',
         description: 'Invalid email or password.',
       });
-      setIsSubmitting(false);
-      setIsProcessingAdminLogin(false);
+    } finally {
+        setIsSubmitting(false);
+        setIsProcessingAdminLogin(false);
     }
   }
 
@@ -251,6 +302,27 @@ export default function LoginPage() {
                 </Button>
               </form>
             </Form>
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  Or continue with
+                </span>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignIn}
+              disabled={isSubmitting}
+            >
+              <GoogleIcon />
+              Sign in with Google
+            </Button>
+
             <div className="mt-4 text-center">
               <Button
                 variant="link"
@@ -323,3 +395,5 @@ export default function LoginPage() {
     </div>
   );
 }
+
+    
