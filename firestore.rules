@@ -1,38 +1,48 @@
 /**
- * # Core Philosophy
- * This ruleset enforces a hybrid security model designed for a library application.
- * It strictly separates public, read-only catalog data (like books, authors) from private, user-owned data (like loans and reservations).
- * Administrative access is managed through a database-backed access control (DBAC) system, granting elevated privileges to designated library staff.
+ * This ruleset provides public read access to global configuration data
+ * while restricting all write operations to a predefined set of administrators.
+ * The model leverages a separate 'roles_admin' collection for administrative
+ * role management, ensuring a clear separation of data and permissions.
  *
- * # Data Structure
- * - `/libraryMembers/{userId}`: Contains private user profile data. The document ID must match the user's Firebase Auth UID.
- * - `/libraryMembers/{userId}/{loans|reservations}`: Subcollections containing user-specific records, accessible only to the owner or an admin.
- * - `/books`, `/authors`, `/publishers`, `/genres`: Top-level collections for public catalog data. These are globally readable but not writable by clients.
- * - `/roles_libraryAdmins/{userId}`: A special collection where the existence of a document signifies a user has administrative privileges.
- * - `/visits/{visitId}`: Contains library visit records for statistical analysis. Writable and readable only by admins.
+ * Core Philosophy:
+ * Public read, Admin-only write. This allows anonymous or any authenticated
+ * user to view application settings, but only trusted admins can modify them.
  *
- * # Key Security Decisions
- * - **No User Listing**: To protect user privacy, non-administrative users cannot list or discover other members in the `/libraryMembers` collection.
- * - **Strict Ownership**: All user-specific data (profiles, loans, reservations) is protected by ownership checks, ensuring users can only access their own information.
- * - **Admin Override**: Users with an entry in `/roles_libraryAdmins` have full read/write access to all user data for management purposes.
- * - **Read-Only Catalogs**: Public catalog collections are locked down to prevent modification by clients, assuming this data is managed by a trusted backend server or the Firebase Console.
+ * Data Structure:
+ * - /appConfig/{configId}: Contains singleton configuration documents like
+ *   `/appConfig/landingPage`.
+ * - /roles_admin/{userId}: A collection where the document ID is the UID of an
+ *   administrator. The presence of a document indicates admin status. This
+ *   collection should be managed via the Firebase Console or a secure backend,
+
+ *   not by client applications.
  *
- * # Denormalization for Authorization
- * To ensure fast and secure authorization, ownership information is denormalized directly onto documents.
- * - `Loan` and `Reservation` documents under a user's subcollection contain a `memberId` field that must match the user's UID.
- * - This avoids slow and costly `get()` calls to parent documents within rules, making the security model more performant and easier to reason about.
+ * Key Security Decisions:
+ * - Public Read Access: The `/appConfig` collection is readable by anyone to
+ *   ensure the application can load its configuration for all visitors.
+ * - Admin-Only Writes: All write operations (create, update, delete) are
+ *   strictly limited to users whose UID is present in the `/roles_admin`
+ *   collection.
+ * - Client-Side Lockdown of Roles: The `/roles_admin` collection is locked
+ *   down completely from any client-side read or write operations to prevent
+ *   users from discovering or modifying administrator roles.
+ * - Note on 'auth/operation-not-allowed': The user's reported error typically
+ *   indicates that the sign-in providers (e.g., Anonymous, Email/Password)
+ *   are not enabled in the Firebase Authentication settings in the Firebase
+ *   Console. This ruleset assumes authentication is configured correctly.
  *
- * # Structural Segregation
- * The data model separates public and private data into different top-level collections. This is more secure and performant for list queries than using a single collection with a boolean "isPublic" flag.
+ * Denormalization for Authorization:
+ * This ruleset uses a Database Access Control (DBAC) pattern by storing
+ * administrator roles in a dedicated `/roles_admin` collection. A simple and
+ * highly performant `exists()` check on this collection is used for
+ * authorization, which avoids slow, costly, or impossible security checks
+ * that would otherwise require `get()` calls.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =====================================================================
     // Helper Functions
-    // =====================================================================
-
     /**
      * Checks if the user is authenticated.
      */
@@ -41,224 +51,80 @@ service cloud.firestore {
     }
 
     /**
-     * Checks if a user is a designated Library Administrator by looking
-     * for their UID in the roles collection.
+     * Checks if the authenticated user is an administrator.
+     * Admin status is determined by the existence of a document corresponding
+     * to their UID in the '/roles_admin' collection.
      */
-    function isLibraryAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/roles_libraryAdmins/$(request.auth.uid));
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/roles_admin/$(request.auth.uid));
     }
 
     /**
-     * Checks if the authenticated user's UID matches the provided userId.
-     */
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    /**
-     * Returns true if the document being accessed already exists.
-     * Crucial for robust update and delete operations.
+     * Verifies that a document exists before an update or delete operation.
+     * Prevents operations on non-existent documents.
      */
     function isExistingDoc() {
       return resource != null;
     }
 
     /**
-     * Combines owner and admin checks for concise access control.
+     * Validates required relational fields on document creation.
+     * Ensures the document's internal `id` matches its path ID.
      */
-    function isOwnerOrAdmin(userId) {
-      return isOwner(userId) || isLibraryAdmin();
+    function isCreateDataValid(configId) {
+      return request.resource.data.id == configId;
     }
 
     /**
-     * A robust check for state-changing operations, ensuring the document
-     * exists and the user is either the owner or an admin.
+     * Ensures critical relational fields are immutable on update.
+     * Prevents the document's internal `id` from being changed.
      */
-    function isExistingOwnerOrAdmin(userId) {
-      return isExistingDoc() && isOwnerOrAdmin(userId);
+    function isUpdateDataValid() {
+      return request.resource.data.id == resource.data.id;
     }
 
     /**
-     * Validates that the `externalAuthId` field in a new libraryMember document
-     * correctly matches the user's UID creating it.
+     * @description
+     *   Controls access to the global application configuration documents,
+     *   such as the landing page settings.
+     * @path /appConfig/{configId}
+     * @allow (get) Any user, signed-in or anonymous, can read a config document.
+     * @allow (update) An authenticated admin user (UID exists in /roles_admin)
+     *   can update an existing document.
+     * @deny (create) A regular authenticated user attempts to create a new
+     *   configuration document.
+     * @principle
+     *   Implements a public-read, admin-only write model using a separate
+     *   roles collection for authorization (DBAC).
      */
-    function hasCorrectExternalAuthIdOnCreate(userId) {
-      return request.resource.data.externalAuthId == userId;
+    match /appConfig/{configId} {
+      allow get, list: if true;
+      allow create: if isAdmin() && isCreateDataValid(configId);
+      allow update: if isAdmin() && isExistingDoc() && isUpdateDataValid();
+      allow delete: if isAdmin() && isExistingDoc();
     }
 
     /**
-     * Ensures the link between a member profile and their auth ID cannot be changed.
+     * @description
+     *   Secures the collection that stores administrator user IDs. This
+     *   collection is used as the source of truth for role-based access
+     *   control throughout the application.
+     * @path /roles_admin/{userId}
+     * @allow No client-side operations are permitted. This collection must be
+     *   managed via the Firebase Console or a trusted server environment.
+     * @deny Any user attempting to read or write to this collection from the
+     *   client application will be denied.
+     * @principle
+     *   Protects sensitive authorization data from all client access,
+     *   preventing users from discovering who the administrators are or
+     *   attempting to elevate their own privileges.
      */
-    function externalAuthIdIsImmutable() {
-      return request.resource.data.externalAuthId == resource.data.externalAuthId;
-    }
-
-    /**
-     * Validates that the `memberId` field in a new loan/reservation document
-     * correctly matches the parent user's UID.
-     */
-    function hasCorrectMemberIdOnCreate(memberId) {
-      return request.resource.data.memberId == memberId;
-    }
-
-    /**
-     * Ensures the ownership link (`memberId`) on a loan/reservation cannot be changed.
-     */
-    function memberIdIsImmutable() {
-      return request.resource.data.memberId == resource.data.memberId;
-    }
-
-    // =====================================================================
-    // User-Specific Data
-    // =====================================================================
-
-    /**
-     * @description Manages library member profiles. A user can create their own profile,
-     *   and can only read or modify their own data. Admins have full access.
-     * @path /libraryMembers/{libraryMemberId}
-     * @allow (create) An authenticated user with UID 'user123' can create their own profile at `/libraryMembers/user123`.
-     * @deny (list) An authenticated user 'user123' cannot list all documents in `/libraryMembers`.
-     * @principle Restricts access to a user's own data tree and prevents user enumeration.
-     */
-    match /libraryMembers/{libraryMemberId} {
-      allow get: if isOwnerOrAdmin(libraryMemberId);
-      allow list: if isLibraryAdmin();
-      allow create: if isOwner(libraryMemberId) && hasCorrectExternalAuthIdOnCreate(libraryMemberId);
-      allow update: if isExistingOwnerOrAdmin(libraryMemberId) && externalAuthIdIsImmutable();
-      allow delete: if isExistingOwnerOrAdmin(libraryMemberId);
-
-      /**
-       * @description Manages a member's loan records. Only the member or an admin can access these records.
-       * @path /libraryMembers/{libraryMemberId}/loans/{loanId}
-       * @allow (create) User 'user123' can create a new loan document in their own subcollection.
-       * @deny (get) User 'user456' cannot get a loan document from `/libraryMembers/user123/loans/{loanId}`.
-       * @principle Enforces data isolation within a user's private subcollections.
-       */
-      match /loans/{loanId} {
-        allow get: if isOwnerOrAdmin(libraryMemberId);
-        allow list: if isOwnerOrAdmin(libraryMemberId);
-        allow create: if isOwnerOrAdmin(libraryMemberId) && hasCorrectMemberIdOnCreate(libraryMemberId);
-        allow update: if isExistingOwnerOrAdmin(libraryMemberId) && memberIdIsImmutable();
-        allow delete: if isExistingOwnerOrAdmin(libraryMemberId);
-      }
-
-      /**
-       * @description Manages a member's reservation records. Only the member or an admin can access these records.
-       * @path /libraryMembers/{libraryMemberId}/reservations/{reservationId}
-       * @allow (list) User 'user123' can list all reservations in their own subcollection.
-       * @deny (update) User 'user456' cannot update a reservation document in user 'user123's subcollection.
-       * @principle Enforces data isolation within a user's private subcollections.
-       */
-      match /reservations/{reservationId} {
-        allow get: if isOwnerOrAdmin(libraryMemberId);
-        allow list: if isOwnerOrAdmin(libraryMemberId);
-        allow create: if isOwnerOrAdmin(libraryMemberId) && hasCorrectMemberIdOnCreate(libraryMemberId);
-        allow update: if isExistingOwnerOrAdmin(libraryMemberId) && memberIdIsImmutable();
-        allow delete: if isExistingOwnerOrAdmin(libraryMemberId);
-      }
-    }
-
-    // =====================================================================
-    // Public Catalog Data (Read-Only)
-    // =====================================================================
-
-    /**
-     * @description Public catalog of all books. Anyone can read this data.
-     *   Writes are disabled for clients and must be done via a trusted server.
-     * @path /books/{bookId}
-     * @allow (get, list) Any user, signed in or not, can read the list of books.
-     * @deny (create, update, delete) No client user can modify the book catalog.
-     * @principle Segregates public data and secures it as read-only for clients.
-     */
-    match /books/{bookId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    /**
-     * @description Public catalog of all authors. Anyone can read this data.
-     * @path /authors/{authorId}
-     * @allow (get, list) Any user can read author information.
-     * @deny (create, update, delete) No client user can modify the author catalog.
-     * @principle Segregates public data and secures it as read-only for clients.
-     */
-    match /authors/{authorId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    /**
-     * @description Public catalog of all publishers. Anyone can read this data.
-     * @path /publishers/{publisherId}
-     * @allow (get, list) Any user can read publisher information.
-     * @deny (create, update, delete) No client user can modify the publisher catalog.
-     * @principle Segregates public data and secures it as read-only for clients.
-     */
-    match /publishers/{publisherId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    /**
-     * @description Public catalog of all genres. Anyone can read this data.
-     * @path /genres/{genreId}
-     * @allow (get, list) Any user can read genre information.
-     * @deny (create, update, delete) No client user can modify the genre catalog.
-     * @principle Segregates public data and secures it as read-only for clients.
-     */
-    match /genres/{genreId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
-    }
-
-    // =====================================================================
-    // Visit Statistics Data
-    // =====================================================================
-    /**
-     * @description Stores library visit records for statistical analysis.
-     *   Only library admins can read or write this data.
-     * @path /visits/{visitId}
-     * @allow (get, list, create, update, delete) An admin can perform any operation on visit records.
-     * @deny (get, list, create, update, delete) Regular users cannot access visit records.
-     * @principle Secures statistical data for administrative use only.
-     */
-    match /visits/{visitId} {
-      allow read, write: if isLibraryAdmin();
-    }
-
-
-    // =====================================================================
-    // Administrative Roles
-    // =====================================================================
-
-    /**
-     * @description Manages admin roles. The existence of a document here grants a user
-     *   admin privileges. This collection is not intended to be managed by clients.
-     * @path /roles_libraryAdmins/{adminUid}
-     * @allow (get) An authenticated user can check if they themselves are an admin.
-     * @deny (list) No user can list all the admins.
-     * @deny (create) A regular user cannot make themselves an admin.
-     * @principle Implements Database-Backed Access Control (DBAC) for administrative roles, while preventing recursive rule evaluation.
-     */
-    match /roles_libraryAdmins/{adminUid} {
-      allow get: if isOwner(adminUid);
+    match /roles_admin/{userId} {
+      allow get: if false;
       allow list: if false;
       allow create: if false;
       allow update: if false;
       allow delete: if false;
     }
-
   }
 }
