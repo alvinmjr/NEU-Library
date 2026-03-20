@@ -92,9 +92,12 @@ export default function DashboardPage() {
     if (!isUserLoading && !user) {
       router.push('/login');
     }
-    // ✅ Show questionnaire every time user logs in
     if (!isUserLoading && user) {
-      setIsQuestionnaireOpen(true);
+      // ✅ Only show questionnaire once per session
+      const hasAnswered = sessionStorage.getItem('visitLogged');
+      if (!hasAnswered) {
+        setIsQuestionnaireOpen(true);
+      }
     }
   }, [user, isUserLoading, router]);
 
@@ -109,6 +112,8 @@ export default function DashboardPage() {
       });
       toast({ title: 'Welcome!', description: 'Your visit has been logged.' });
       setIsQuestionnaireOpen(false);
+      // ✅ Mark questionnaire as answered for this session
+      sessionStorage.setItem('visitLogged', 'true');
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -130,6 +135,8 @@ export default function DashboardPage() {
 
   const handleSignOut = () => {
     if (auth) auth.signOut();
+    // ✅ Clear session flag on logout so questionnaire shows on next login
+    sessionStorage.removeItem('visitLogged');
     router.push('/');
   };
 
@@ -175,15 +182,15 @@ export default function DashboardPage() {
         </main>
       </SidebarInset>
 
-      {/* ✅ Mandatory Visit Questionnaire Modal */}
+      {/* Mandatory Visit Questionnaire Modal */}
       <Dialog
         open={isQuestionnaireOpen}
-        onOpenChange={() => {}} // ✅ Prevents closing by clicking outside
+        onOpenChange={() => {}}
       >
         <DialogContent
           className="sm:max-w-[425px]"
-          onPointerDownOutside={(e) => e.preventDefault()} // ✅ Blocks outside click
-          onEscapeKeyDown={(e) => e.preventDefault()} // ✅ Blocks Escape key
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
             <DialogTitle>Welcome! 👋</DialogTitle>
@@ -194,7 +201,6 @@ export default function DashboardPage() {
 
           <Form {...visitForm}>
             <form onSubmit={visitForm.handleSubmit(onVisitSubmit)} className="space-y-4">
-
               <FormField
                 control={visitForm.control}
                 name="college"
@@ -260,7 +266,6 @@ export default function DashboardPage() {
               <Button type="submit" className="w-full" disabled={isSubmitting}>
                 {isSubmitting ? 'Submitting...' : 'Enter Library Dashboard'}
               </Button>
-
             </form>
           </Form>
         </DialogContent>
