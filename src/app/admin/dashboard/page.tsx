@@ -9,12 +9,13 @@ import {
   query,
   where,
   Timestamp,
+  setDoc,
+  deleteDoc,
 } from 'firebase/firestore';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -30,7 +31,15 @@ import {
   startOfWeek,
   endOfWeek,
 } from 'date-fns';
-import { Calendar as CalendarIcon, Users, BookOpen, Building, PlusCircle, GraduationCap, Briefcase } from 'lucide-react';
+import {
+  Calendar as CalendarIcon,
+  Users,
+  PlusCircle,
+  GraduationCap,
+  Briefcase,
+  ShieldX,
+  ShieldCheck,
+} from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 
 import { Button } from '@/components/ui/button';
@@ -69,6 +78,15 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
   useAuth,
@@ -81,7 +99,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 
 const colleges = [
   'All',
@@ -116,6 +133,15 @@ type VisitData = {
   isEmployee: boolean;
 };
 
+type MemberData = {
+  id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  studentId?: string;
+  membershipDate?: string;
+};
+
 type DatePreset = 'today' | 'week' | 'custom';
 
 export default function AdminDashboardPage() {
@@ -128,6 +154,8 @@ export default function AdminDashboardPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isLogVisitOpen, setIsLogVisitOpen] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>('today');
+  const [blockedUserIds, setBlockedUserIds] = useState<Set<string>>(new Set());
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
 
   const [date, setDate] = React.useState<DateRange | undefined>({
     from: startOfDay(new Date()),
@@ -137,7 +165,6 @@ export default function AdminDashboardPage() {
   const [collegeFilter, setCollegeFilter] = useState('All');
   const [employeeStatusFilter, setEmployeeStatusFilter] = useState('all');
 
-  // Handle preset changes
   const handlePresetChange = (preset: DatePreset) => {
     setDatePreset(preset);
     if (preset === 'today') {
@@ -152,6 +179,16 @@ export default function AdminDashboardPage() {
     [firestore]
   );
 
+  const membersCollectionRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'libraryMembers') : null),
+    [firestore]
+  );
+
+  const blockedCollectionRef = useMemoFirebase(
+    () => (firestore ? collection(firestore, 'blockedUsers') : null),
+    [firestore]
+  );
+
   const visitsQuery = useMemoFirebase(() => {
     if (!visitsCollectionRef || !date?.from || !date?.to) return null;
     return query(
@@ -161,7 +198,16 @@ export default function AdminDashboardPage() {
     );
   }, [visitsCollectionRef, date]);
 
-  const { data: rawVisits, isLoading } = useCollection<VisitData>(visitsQuery);
+  const { data: rawVisits } = useCollection<VisitData>(visitsQuery);
+  const { data: members } = useCollection<MemberData>(membersCollectionRef);
+  const { data: blockedUsers } = useCollection<{ id: string }>(blockedCollectionRef);
+
+  // ✅ Keep blockedUserIds in sync with Firestore
+  useEffect(() => {
+    if (blockedUsers) {
+      setBlockedUserIds(new Set(blockedUsers.map(u => u.id)));
+    }
+  }, [blockedUsers]);
 
   const filteredVisits = useMemo(() => {
     if (!rawVisits) return [];
@@ -181,18 +227,16 @@ export default function AdminDashboardPage() {
     const employeeVisits = filteredVisits.filter(v => v.isEmployee).length;
     const studentVisits = filteredVisits.filter(v => !v.isEmployee).length;
 
-    // Chart data by college
     const visitsByCollege = filteredVisits.reduce((acc, visit) => {
       acc[visit.college] = (acc[visit.college] || 0) + 1;
       return acc;
     }, {} as { [key: string]: number });
 
     const collegeChartData = Object.entries(visitsByCollege).map(([college, count]) => ({
-      college: college.replace('College of ', '').replace(' & Humanities', ''),
+      college: college.replace('College of ', ''),
       visits: count,
     }));
 
-    // Chart data by reason
     const visitsByReason = filteredVisits.reduce((acc, visit) => {
       acc[visit.reason] = (acc[visit.reason] || 0) + 1;
       return acc;
@@ -241,6 +285,37 @@ export default function AdminDashboardPage() {
   const handleSignOut = () => {
     if (auth) auth.signOut();
     router.push('/');
+  };
+
+  // ✅ Block a user
+  const handleBlockUser = async (memberId: string, memberEmail: string) => {
+    if (!firestore) return;
+    setBlockingUserId(memberId);
+    try {
+      await setDoc(doc(firestore, 'blockedUsers', memberId), {
+        email: memberEmail,
+        blockedAt: new Date(),
+      });
+      toast({ title: 'User Blocked', description: `${memberEmail} has been blocked.` });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not block user.' });
+    } finally {
+      setBlockingUserId(null);
+    }
+  };
+
+  // ✅ Unblock a user
+  const handleUnblockUser = async (memberId: string, memberEmail: string) => {
+    if (!firestore) return;
+    setBlockingUserId(memberId);
+    try {
+      await deleteDoc(doc(firestore, 'blockedUsers', memberId));
+      toast({ title: 'User Unblocked', description: `${memberEmail} has been unblocked.` });
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not unblock user.' });
+    } finally {
+      setBlockingUserId(null);
+    }
   };
 
   const logVisitForm = useForm<z.infer<typeof logVisitSchema>>({
@@ -338,7 +413,6 @@ export default function AdminDashboardPage() {
         {/* Additional Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-medium text-muted-foreground">Filter by:</span>
-
           <Select value={reasonFilter} onValueChange={setReasonFilter}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Reason for Visit" />
@@ -411,7 +485,6 @@ export default function AdminDashboardPage() {
 
         {/* Charts */}
         <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
-          {/* Visits by College */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Visits by College</CardTitle>
@@ -435,7 +508,6 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          {/* Visits by Reason */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Visits by Reason</CardTitle>
@@ -460,6 +532,78 @@ export default function AdminDashboardPage() {
           </Card>
         </div>
 
+        {/* ✅ Users Table */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Registered Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!members || members.length === 0 ? (
+              <div className="flex h-24 items-center justify-center text-muted-foreground text-sm">
+                No registered users yet
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Student ID</TableHead>
+                    <TableHead>Member Since</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.map((member) => {
+                    const isUserBlocked = blockedUserIds.has(member.id);
+                    return (
+                      <TableRow key={member.id}>
+                        <TableCell className="font-medium">{member.email}</TableCell>
+                        <TableCell>{member.studentId || '—'}</TableCell>
+                        <TableCell>
+                          {member.membershipDate
+                            ? format(new Date(member.membershipDate), 'MMM d, yyyy')
+                            : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {isUserBlocked ? (
+                            <Badge variant="destructive">Blocked</Badge>
+                          ) : (
+                            <Badge variant="secondary">Active</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {isUserBlocked ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={blockingUserId === member.id}
+                              onClick={() => handleUnblockUser(member.id, member.email)}
+                            >
+                              <ShieldCheck className="mr-2 h-4 w-4 text-green-500" />
+                              {blockingUserId === member.id ? 'Unblocking...' : 'Unblock'}
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              disabled={blockingUserId === member.id}
+                              onClick={() => handleBlockUser(member.id, member.email)}
+                            >
+                              <ShieldX className="mr-2 h-4 w-4" />
+                              {blockingUserId === member.id ? 'Blocking...' : 'Block'}
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
       </main>
 
       {/* Log Visit Modal */}
@@ -473,7 +617,6 @@ export default function AdminDashboardPage() {
           </DialogHeader>
           <Form {...logVisitForm}>
             <form onSubmit={logVisitForm.handleSubmit(onLogVisitSubmit)} className="space-y-4">
-              
               <FormField
                 control={logVisitForm.control}
                 name="visitorName"
@@ -487,7 +630,6 @@ export default function AdminDashboardPage() {
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={logVisitForm.control}
                 name="college"
@@ -510,7 +652,6 @@ export default function AdminDashboardPage() {
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={logVisitForm.control}
                 name="reason"
@@ -533,7 +674,6 @@ export default function AdminDashboardPage() {
                   </FormItem>
                 )}
               />
-
               <FormField
                 control={logVisitForm.control}
                 name="isEmployee"
@@ -549,7 +689,6 @@ export default function AdminDashboardPage() {
                   </FormItem>
                 )}
               />
-
               <DialogFooter>
                 <Button type="submit">Save Visit</Button>
               </DialogFooter>

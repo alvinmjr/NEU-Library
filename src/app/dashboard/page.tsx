@@ -3,11 +3,11 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { LogOut, Book } from 'lucide-react';
+import { LogOut, Book, ShieldX } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { collection } from 'firebase/firestore';
+import { collection, doc, getDoc } from 'firebase/firestore';
 import { Button } from '@/components/ui/button';
 import { useAuth, useUser, useFirestore, useMemoFirebase, addDocumentNonBlocking } from '@/firebase';
 import {
@@ -72,6 +72,8 @@ export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   const [isQuestionnaireOpen, setIsQuestionnaireOpen] = useState(false);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [isCheckingBlock, setIsCheckingBlock] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const visitsCollectionRef = useMemoFirebase(
@@ -91,15 +93,38 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isUserLoading && !user) {
       router.push('/login');
+      return;
     }
-    if (!isUserLoading && user) {
-      // ✅ Only show questionnaire once per session
-      const hasAnswered = sessionStorage.getItem('visitLogged');
-      if (!hasAnswered) {
-        setIsQuestionnaireOpen(true);
-      }
+
+    if (!isUserLoading && user && firestore) {
+      const checkBlockAndQuestionnaire = async () => {
+        setIsCheckingBlock(true);
+        try {
+          // ✅ Check if user is blocked FIRST
+          const blockedRef = doc(firestore, 'blockedUsers', user.uid);
+          const blockedSnap = await getDoc(blockedRef);
+
+          if (blockedSnap.exists()) {
+            // User is blocked — show blocked modal, sign them out
+            setIsBlocked(true);
+            if (auth) auth.signOut();
+          } else {
+            // Not blocked — check if questionnaire needs to show
+            const hasAnswered = sessionStorage.getItem('visitLogged');
+            if (!hasAnswered) {
+              setIsQuestionnaireOpen(true);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking block status:', error);
+        } finally {
+          setIsCheckingBlock(false);
+        }
+      };
+
+      checkBlockAndQuestionnaire();
     }
-  }, [user, isUserLoading, router]);
+  }, [user, isUserLoading, router, firestore, auth]);
 
   async function onVisitSubmit(values: z.infer<typeof visitSchema>) {
     if (!visitsCollectionRef) return;
@@ -112,7 +137,6 @@ export default function DashboardPage() {
       });
       toast({ title: 'Welcome!', description: 'Your visit has been logged.' });
       setIsQuestionnaireOpen(false);
-      // ✅ Mark questionnaire as answered for this session
       sessionStorage.setItem('visitLogged', 'true');
     } catch (error) {
       toast({
@@ -125,17 +149,8 @@ export default function DashboardPage() {
     }
   }
 
-  if (isUserLoading || !user) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <p>Loading...</p>
-      </div>
-    );
-  }
-
   const handleSignOut = () => {
     if (auth) auth.signOut();
-    // ✅ Clear session flag on logout so questionnaire shows on next login
     sessionStorage.removeItem('visitLogged');
     router.push('/');
   };
@@ -144,133 +159,179 @@ export default function DashboardPage() {
     return email ? email.charAt(0).toUpperCase() : '';
   };
 
+  if (isUserLoading || isCheckingBlock) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
+  if (!user && !isBlocked) return null;
+
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold text-sidebar-primary">
-            <Book className="h-6 w-6" />
-            <span>NEU Library</span>
-          </Link>
-        </SidebarHeader>
-        <SidebarContent>
-          {/* Navigation items can be added here in the future */}
-        </SidebarContent>
-        <SidebarFooter>
-          <div className="flex items-center gap-3 p-2">
-            <Avatar>
-              {user.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || user.email!} />}
-              <AvatarFallback>{getInitials(user.email!)}</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col text-sm overflow-hidden">
-              <span className="text-muted-foreground">Logged in as:</span>
-              <span className="font-medium truncate">{user.email}</span>
-            </div>
-          </div>
-          <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start">
-            <LogOut className="mr-2" />
-            Logout
-          </Button>
-        </SidebarFooter>
-      </Sidebar>
-
-      <SidebarInset>
-        <main className="flex flex-1 items-center justify-center p-4">
-          <div className="text-center">
-            <h1 className="text-5xl font-bold mb-6">Welcome to NEU Library!</h1>
-          </div>
-        </main>
-      </SidebarInset>
-
-      {/* Mandatory Visit Questionnaire Modal */}
-      <Dialog
-        open={isQuestionnaireOpen}
-        onOpenChange={() => {}}
-      >
+    <>
+      {/* ✅ Blocked User Modal */}
+      <Dialog open={isBlocked} onOpenChange={() => {}}>
         <DialogContent
           className="sm:max-w-[425px]"
           onPointerDownOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Welcome! 👋</DialogTitle>
-            <DialogDescription>
-              Please fill out this quick form before accessing the library dashboard.
+            <div className="flex justify-center mb-4">
+              <ShieldX className="h-16 w-16 text-destructive" />
+            </div>
+            <DialogTitle className="text-center text-xl">
+              Account Blocked
+            </DialogTitle>
+            <DialogDescription className="text-center text-base pt-2">
+              You have been blocked from accessing the NEU Library app.
+              Please contact the administrator for more details.
             </DialogDescription>
           </DialogHeader>
-
-          <Form {...visitForm}>
-            <form onSubmit={visitForm.handleSubmit(onVisitSubmit)} className="space-y-4">
-              <FormField
-                control={visitForm.control}
-                name="college"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>College</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select your college" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {colleges.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={visitForm.control}
-                name="reason"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Reason for Visit</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a reason" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {visitReasons.map((r) => (
-                          <SelectItem key={r} value={r}>{r}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={visitForm.control}
-                name="isEmployee"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div>
-                      <FormLabel>Are you an employee?</FormLabel>
-                      <p className="text-xs text-muted-foreground">Toggle on if you are a teacher or staff</p>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? 'Submitting...' : 'Enter Library Dashboard'}
-              </Button>
-            </form>
-          </Form>
+          <div className="mt-2 rounded-lg bg-muted p-4 text-sm text-center text-muted-foreground">
+            📧 Contact: <span className="font-medium">jcesperanza@neu.edu.ph</span>
+          </div>
+          <Button
+            className="w-full mt-2"
+            variant="destructive"
+            onClick={() => {
+              sessionStorage.removeItem('visitLogged');
+              router.push('/');
+            }}
+          >
+            Go Back to Home
+          </Button>
         </DialogContent>
       </Dialog>
 
-    </SidebarProvider>
+      {/* Main Dashboard — only shown if not blocked */}
+      {!isBlocked && (
+        <SidebarProvider>
+          <Sidebar>
+            <SidebarHeader>
+              <Link href="/dashboard" className="flex items-center gap-2 text-xl font-bold text-sidebar-primary">
+                <Book className="h-6 w-6" />
+                <span>NEU Library</span>
+              </Link>
+            </SidebarHeader>
+            <SidebarContent>
+              {/* Navigation items can be added here in the future */}
+            </SidebarContent>
+            <SidebarFooter>
+              <div className="flex items-center gap-3 p-2">
+                <Avatar>
+                  {user?.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || user.email!} />}
+                  <AvatarFallback>{getInitials(user?.email || '')}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col text-sm overflow-hidden">
+                  <span className="text-muted-foreground">Logged in as:</span>
+                  <span className="font-medium truncate">{user?.email}</span>
+                </div>
+              </div>
+              <Button onClick={handleSignOut} variant="ghost" className="w-full justify-start">
+                <LogOut className="mr-2" />
+                Logout
+              </Button>
+            </SidebarFooter>
+          </Sidebar>
+
+          <SidebarInset>
+            <main className="flex flex-1 items-center justify-center p-4">
+              <div className="text-center">
+                <h1 className="text-5xl font-bold mb-6">Welcome to NEU Library!</h1>
+              </div>
+            </main>
+          </SidebarInset>
+
+          {/* Mandatory Visit Questionnaire Modal */}
+          <Dialog open={isQuestionnaireOpen} onOpenChange={() => {}}>
+            <DialogContent
+              className="sm:max-w-[425px]"
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onEscapeKeyDown={(e) => e.preventDefault()}
+            >
+              <DialogHeader>
+                <DialogTitle>Welcome! 👋</DialogTitle>
+                <DialogDescription>
+                  Please fill out this quick form before accessing the library dashboard.
+                </DialogDescription>
+              </DialogHeader>
+
+              <Form {...visitForm}>
+                <form onSubmit={visitForm.handleSubmit(onVisitSubmit)} className="space-y-4">
+                  <FormField
+                    control={visitForm.control}
+                    name="college"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>College</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select your college" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {colleges.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={visitForm.control}
+                    name="reason"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reason for Visit</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a reason" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {visitReasons.map((r) => (
+                              <SelectItem key={r} value={r}>{r}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={visitForm.control}
+                    name="isEmployee"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                        <div>
+                          <FormLabel>Are you an employee?</FormLabel>
+                          <p className="text-xs text-muted-foreground">Toggle on if you are a teacher or staff</p>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? 'Submitting...' : 'Enter Library Dashboard'}
+                  </Button>
+                </form>
+              </Form>
+            </DialogContent>
+          </Dialog>
+        </SidebarProvider>
+      )}
+    </>
   );
 }
